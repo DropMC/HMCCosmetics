@@ -87,6 +87,13 @@ public class CosmeticCommand implements CommandExecutor {
             }
         }
 
+        // Only "/cosmeticos" and "/cosmeticos reload" are supported; every other
+        // subcommand below is intentionally unreachable (kept, not deleted, in
+        // case this is reverted later) and must behave as if it doesn't exist.
+        if (!firstArgs.equals("reload")) {
+            return true;
+        }
+
         switch (firstArgs) {
             case ("reload") -> {
                 if (!sender.hasPermission("HMCCosmetics.cmd.reload") && !sender.isOp()) {

@@ -32,23 +32,17 @@ public class CosmeticCommandTabComplete implements TabCompleter {
         List<String> finalCompletions = new ArrayList<>();
 
         if (args.length == 1) {
-            if (hasPermission(sender, "hmccosmetics.cmd.apply")) completions.add("apply");
-            if (hasPermission(sender, "hmccosmetics.cmd.unapply")) completions.add("unapply");
-            if (hasPermission(sender, "hmccosmetics.cmd.menu")) completions.add("menu");
             if (hasPermission(sender, "hmccosmetics.cmd.reload")) completions.add("reload");
-            if (hasPermission(sender, "hmccosmetics.cmd.wardrobe")) completions.add("wardrobes");
-            if (hasPermission(sender, "hmccosmetics.cmd.dataclear")) completions.add("dataclear");
-            if (hasPermission(sender, "hmccosmetics.cmd.dye")) completions.add("dye");
-            if (hasPermission(sender, "hmccosmetics.cmd.setwardrobesetting")) completions.add("setwardrobesetting");
-            if (hasPermission(sender, "hmccosmetics.cmd.hide")) completions.add("hide");
-            if (hasPermission(sender, "hmccosmetics.cmd.show")) completions.add("show");
-            if (hasPermission(sender, "hmccosmetics.cmd.toggle")) completions.add("toggle");
-            if (hasPermission(sender, "hmccosmetics.cmd.debug")) completions.add("debug");
-            if (hasPermission(sender, "hmccosmetics.cmd.disableall")) completions.add("disableall");
-            if (hasPermission(sender, "hmccosmetics.cmd.hiddenreasons")) completions.add("hiddenreasons");
-            if (hasPermission(sender, "hmccosmetics.cmd.clearhiddenreasons")) completions.add("clearhiddenreasons");
 
             StringUtil.copyPartialMatches(args[0], completions, finalCompletions);
+        }
+
+        // Only "/cosmeticos" and "/cosmeticos reload" are supported, and reload
+        // takes no further arguments, so nothing below this point should ever
+        // suggest anything. The blocks below are intentionally unreachable
+        // (kept, not deleted, in case this is reverted later).
+        if (args.length >= 2) {
+            return finalCompletions;
         }
 
         if (!(sender instanceof Player)) return completions;
