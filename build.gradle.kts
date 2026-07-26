@@ -179,9 +179,8 @@ bukkit {
     version = "${project.version}"
 
     commands {
-        register("hmccosmetics") {
+        register("cosmeticos") {
             description = "Base Cosmetic Command"
-            aliases = listOf("cosmetic", "cosmetics")
         }
     }
     permissions {

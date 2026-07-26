@@ -114,7 +114,7 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         this.playerSearchManager = new PlayerSearchManager(Settings.getEngine(), this);
 
         // Commands
-        PluginCommand cosmeticCommand = getServer().getPluginCommand("hmccosmetics");
+        PluginCommand cosmeticCommand = getServer().getPluginCommand("cosmeticos");
         if (cosmeticCommand != null) {
             cosmeticCommand.setExecutor(new CosmeticCommand());
             cosmeticCommand.setTabCompleter(new CosmeticCommandTabComplete());
