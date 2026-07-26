@@ -59,19 +59,24 @@ public class CosmeticCommand implements CommandExecutor {
             }
 
             CosmeticUser user = CosmeticUsers.getUser(((Player) sender).getUniqueId());
-            Menu menu = Menus.getDefaultMenu();
 
             if (user == null) {
                 MessagesUtil.sendMessage(sender, "invalid-player");
                 return true;
             }
 
-            if (menu == null) {
-                MessagesUtil.sendMessage(sender, "invalid-menu");
+            Wardrobe wardrobe = WardrobeSettings.getWardrobe("default");
+
+            if (wardrobe == null) {
+                MessagesUtil.sendMessage(sender, "no-wardrobes");
                 return true;
             }
 
-            menu.openMenu(user);
+            if (user.isInWardrobe()) {
+                user.leaveWardrobe(false);
+            } else {
+                user.enterWardrobe(wardrobe, false);
+            }
             return true;
         }
         Player player = sender instanceof Player ? (Player) sender : null;
