@@ -38,6 +38,10 @@ import java.util.logging.Level;
 
 public class UserWardrobeManager {
 
+    private static final int SUBTITLE_FADE_IN = 500;
+    private static final int SUBTITLE_STAY = 5000;
+    private static final int SUBTITLE_FADE_OUT = 1000;
+
     @Getter
     private final int NPC_ID;
     @Getter
@@ -123,8 +127,6 @@ public class UserWardrobeManager {
         List<Player> viewer = Collections.singletonList(player);
         List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);
         outsideViewers.remove(player);
-
-        MessagesUtil.sendMessage(player, "opened-wardrobe");
 
         Runnable run = () -> {
             if (!player.isOnline()) {
@@ -213,6 +215,12 @@ public class UserWardrobeManager {
             this.active = true;
             update();
             setWardrobeStatus(WardrobeStatus.RUNNING);
+
+            // Explains the two controls the wardrobe has, since neither is discoverable. Skipped when a
+            // menu opens on entry: the container screen hides the HUD, so the title would never be seen.
+            if (!WardrobeSettings.isEnterOpenMenu()) {
+                MessagesUtil.sendSubtitle(player, "wardrobe-controls", SUBTITLE_FADE_IN, SUBTITLE_STAY, SUBTITLE_FADE_OUT);
+            }
         };
 
 
@@ -241,7 +249,6 @@ public class UserWardrobeManager {
 
         if (player == null) return;
         if (!Bukkit.getServer().getAllowFlight()) player.setAllowFlight(false);
-        MessagesUtil.sendMessage(player, "closed-wardrobe");
 
         Runnable run = () -> {
             this.active = false;

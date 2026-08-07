@@ -3,6 +3,8 @@ package com.hibiscusmc.hmccosmetics.util;
 import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.Settings;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
+import com.nexomc.nexo.glyphs.GlyphTag;
+import com.nexomc.nexo.glyphs.ShiftTag;
 import me.lojosho.hibiscuscommons.hooks.Hooks;
 import me.lojosho.hibiscuscommons.util.AdventureUtils;
 import me.lojosho.shaded.configurate.ConfigurationNode;
@@ -10,6 +12,7 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.title.Title;
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -73,6 +76,14 @@ public class MessagesUtil {
         player.sendActionBar(finalMessage);
     }
 
+    public static void sendSubtitle(Player player, String key, int fadein, int stay, int fadeout) {
+        Component finalMessage = processString(player, key);
+        if (finalMessage == null) return;
+
+        Title.Times times = Title.Times.times(Duration.ofMillis(fadein), Duration.ofMillis(stay), Duration.ofMillis(fadeout));
+        player.showTitle(Title.title(Component.empty(), finalMessage, times));
+    }
+
     public static void sendTitle(Player player, String message) {
         sendTitle(player, message, 2000, 2000, 2000);
     }
@@ -96,9 +107,9 @@ public class MessagesUtil {
         if (player != null) message = Hooks.processPlaceholders(player, message);
         message = message.replaceAll("%prefix%", prefix);
         if (placeholders != null ) {
-            return AdventureUtils.MINI_MESSAGE.deserialize(message, placeholders);
+            return AdventureUtils.MINI_MESSAGE.deserialize(message, TagResolver.resolver(nexoTags(), placeholders));
         }
-        return AdventureUtils.MINI_MESSAGE.deserialize(message);
+        return AdventureUtils.MINI_MESSAGE.deserialize(message, nexoTags());
     }
 
     @NotNull
@@ -116,15 +127,34 @@ public class MessagesUtil {
         message = message.replaceAll("%prefix%", prefix);
         if (player != null) message = Hooks.processPlaceholders(player, message);
         if (placeholders != null ) {
-            return AdventureUtils.MINI_MESSAGE.deserialize(message, placeholders);
+            return AdventureUtils.MINI_MESSAGE.deserialize(message, TagResolver.resolver(nexoTags(), placeholders));
         }
-        return AdventureUtils.MINI_MESSAGE.deserialize(message);
+        return AdventureUtils.MINI_MESSAGE.deserialize(message, nexoTags());
     }
 
     public static String processStringNoKeyString(Player player, String message) {
         message = message.replaceAll("%prefix%", prefix);
         if (player != null) message = Hooks.processPlaceholders(player, message);
         return message;
+    }
+
+    /**
+     * Nexo's {@code <glyph:id>} and {@code <shift:n>} tags, which neither MiniMessage nor
+     * HibiscusCommons knows on its own. Without them a glyph reaches the client as literal text.
+     * Nexo is a soft dependency, so on a server without it the tags are left alone.
+     * <p>
+     * These are handed to MiniMessage as resolvers rather than pre-parsed into the string, because
+     * pre-parsing round-trips through the serializer and escapes every tag MiniMessage does not
+     * know, which would break the {@code <cosmetic>} style placeholders passed in alongside.
+     */
+    private static TagResolver nexoTags() {
+        if (!Bukkit.getPluginManager().isPluginEnabled("Nexo")) return TagResolver.empty();
+        return nexoResolvers();
+    }
+
+    /** Split out so the Nexo classes are only ever loaded once {@link #nexoTags()} confirms Nexo is present. */
+    private static TagResolver nexoResolvers() {
+        return TagResolver.resolver(GlyphTag.INSTANCE.getRESOLVER(), ShiftTag.INSTANCE.getRESOLVER());
     }
 
     public static void sendDebugMessages(String message) {

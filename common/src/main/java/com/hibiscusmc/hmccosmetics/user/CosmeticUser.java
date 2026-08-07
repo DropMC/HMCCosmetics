@@ -204,7 +204,9 @@ public class CosmeticUser implements CosmeticHolder {
 
         this.updateCosmetic();
 
-        if(isHidden() && !playerCosmetics.isEmpty()) {
+        // Hiding by gamemode is automatic and permanent for as long as the player stays in it (typically
+        // spectator), so the reminder is pure noise every tick rather than something to act on.
+        if(isHidden() && !isHidden(HiddenReason.GAMEMODE) && !playerCosmetics.isEmpty()) {
             MessagesUtil.sendActionBar(getPlayer(), "hidden-cosmetics");
         }
     }
