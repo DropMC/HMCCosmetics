@@ -10,7 +10,7 @@ no-cosmetic-permission: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não tem 
 no-cosmetic-slot: "<glyph:exclamation:3> <red><b>ERRO!</b> Não há nenhum cosmético neste slot."
 on-click-cooldown: "<glyph:exclamation:2> <yellow><b>AVISO!</b> Espere um pouco antes de fazer isso de novo."
 
-wardrobe-controls: "<gray>Botão esquerdo <white>para abrir o menu, <gray>Shift <white>para sair"
+wardrobe-controls: "<glyph:mouse:1> <white>para abrir o menu <dark_gray>| <glyph:shift_key> <white>para sair"
 not-near-wardrobe: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não está perto do provador."
 set-wardrobe-location: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Nova localização do provador definida."
 set-wardrobe-viewing: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Nova localização de visualização definida."

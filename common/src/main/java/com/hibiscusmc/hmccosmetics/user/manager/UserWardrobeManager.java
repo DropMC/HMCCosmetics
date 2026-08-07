@@ -38,10 +38,6 @@ import java.util.logging.Level;
 
 public class UserWardrobeManager {
 
-    private static final int SUBTITLE_FADE_IN = 500;
-    private static final int SUBTITLE_STAY = 5000;
-    private static final int SUBTITLE_FADE_OUT = 1000;
-
     @Getter
     private final int NPC_ID;
     @Getter
@@ -215,12 +211,6 @@ public class UserWardrobeManager {
             this.active = true;
             update();
             setWardrobeStatus(WardrobeStatus.RUNNING);
-
-            // Explains the two controls the wardrobe has, since neither is discoverable. Skipped when a
-            // menu opens on entry: the container screen hides the HUD, so the title would never be seen.
-            if (!WardrobeSettings.isEnterOpenMenu()) {
-                MessagesUtil.sendSubtitle(player, "wardrobe-controls", SUBTITLE_FADE_IN, SUBTITLE_STAY, SUBTITLE_FADE_OUT);
-            }
         };
 
 
@@ -333,6 +323,12 @@ public class UserWardrobeManager {
                     return;
                 }
                 MessagesUtil.sendDebugMessages("WardrobeUpdate[user=" + user.getUniqueId() + ",status=" + getWardrobeStatus() + "]");
+
+                // Neither control is discoverable, so the hint stays up for the whole session instead of
+                // flashing once on entry. Resent every run because the action bar fades on its own, and so
+                // it comes back by itself once a menu stops covering the HUD.
+                MessagesUtil.sendActionBar(player, "wardrobe-controls");
+
                 List<Player> viewer = Collections.singletonList(player);
                 List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);
                 outsideViewers.remove(player);

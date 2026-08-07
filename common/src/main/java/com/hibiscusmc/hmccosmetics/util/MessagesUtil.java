@@ -76,14 +76,6 @@ public class MessagesUtil {
         player.sendActionBar(finalMessage);
     }
 
-    public static void sendSubtitle(Player player, String key, int fadein, int stay, int fadeout) {
-        Component finalMessage = processString(player, key);
-        if (finalMessage == null) return;
-
-        Title.Times times = Title.Times.times(Duration.ofMillis(fadein), Duration.ofMillis(stay), Duration.ofMillis(fadeout));
-        player.showTitle(Title.title(Component.empty(), finalMessage, times));
-    }
-
     public static void sendTitle(Player player, String message) {
         sendTitle(player, message, 2000, 2000, 2000);
     }
