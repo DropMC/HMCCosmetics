@@ -305,6 +305,10 @@ public class UserWardrobeManager {
                 player.hideBossBar(bossBar);
             }
 
+            // The controls hint would otherwise sit on screen for its own fade after the player is
+            // already back outside, where neither control does anything.
+            player.sendActionBar(Component.empty());
+
             user.updateCosmetic();
         };
         run.run();
