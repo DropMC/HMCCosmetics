@@ -25,6 +25,21 @@ public class Menus {
 
     private static final HashMap<String, Menu> MENUS = new HashMap<>();
     private static final HashMap<UUID, Long> COOLDOWNS = new HashMap<>();
+    private static final HashMap<UUID, Menu> LAST_OPENED = new HashMap<>();
+
+    /**
+     * Records the menu a viewer last opened, so a screen opened on top of it (the dye menu) knows
+     * where its back button leads.
+     */
+    public static void setLastOpened(@NotNull UUID uuid, @NotNull Menu menu) {
+        LAST_OPENED.put(uuid, menu);
+    }
+
+    /** The menu {@code uuid} last opened, or null if they have not opened one since the last reload. */
+    @Nullable
+    public static Menu getLastOpened(@NotNull UUID uuid) {
+        return LAST_OPENED.get(uuid);
+    }
 
     public static void addMenu(@NotNull Menu menu) {
         MENUS.put(menu.getId().toUpperCase(), menu);
@@ -88,6 +103,8 @@ public class Menus {
     public static void setup() {
         MENUS.clear();
         COOLDOWNS.clear();
+        // Every Menu here is about to be replaced, so a remembered one would reopen a stale instance.
+        LAST_OPENED.clear();
 
         File menusFolder = new File(HMCCosmeticsPlugin.getInstance().getDataFolder() + "/menus");
         if (!menusFolder.exists()) menusFolder.mkdir();

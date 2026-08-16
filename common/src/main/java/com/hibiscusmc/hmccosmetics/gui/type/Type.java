@@ -2,14 +2,17 @@ package com.hibiscusmc.hmccosmetics.gui.type;
 
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticHolder;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
+import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import me.lojosho.hibiscuscommons.HibiscusCommonsPlugin;
 import me.lojosho.hibiscuscommons.hooks.Hooks;
+import me.lojosho.hibiscuscommons.util.AdventureUtils;
 import me.lojosho.shaded.configurate.ConfigurationNode;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -74,14 +77,14 @@ public abstract class Type {
             if (itemMeta.hasDisplayName()) {
                 String displayName = MiniMessage.miniMessage().serialize(itemMeta.displayName());
                 displayName = Hooks.processPlaceholders(viewer, displayName);
-                itemMeta.displayName(MiniMessage.miniMessage().deserialize(displayName).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+                itemMeta.displayName(AdventureUtils.MINI_MESSAGE.deserialize(displayName, MessagesUtil.nexoTags()).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
             }
 
             if (itemMeta.hasLore()) {
                 for (Component loreLine : itemMeta.lore()) {
                     String loreStringLine = MiniMessage.miniMessage().serialize(loreLine);
                     loreStringLine = Hooks.processPlaceholders(viewer, loreStringLine);
-                    processedLore.add(MiniMessage.miniMessage().deserialize(loreStringLine).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+                    processedLore.add(AdventureUtils.MINI_MESSAGE.deserialize(loreStringLine, MessagesUtil.nexoTags()).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
                 }
             }
 
@@ -112,6 +115,10 @@ public abstract class Type {
             }
             itemMeta.setLore(processedLore);
         }
+
+        // A menu item shows only the name and lore it was configured with. Everything Minecraft adds on
+        // its own - "Dyed", "When worn: +3 Armor", enchantments, trims - is noise on a cosmetic icon.
+        itemMeta.addItemFlags(ItemFlag.values());
 
         return itemMeta;
     }

@@ -28,6 +28,8 @@ import lombok.Setter;
 import me.lojosho.hibiscuscommons.hooks.Hooks;
 import me.lojosho.hibiscuscommons.nms.NMSHandlers;
 import me.lojosho.hibiscuscommons.util.InventoryUtils;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
@@ -36,6 +38,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -410,6 +413,11 @@ public class CosmeticUser implements CosmeticHolder {
             //MessagesUtil.sendDebugMessages("GetUserCosemticUser Item is null");
             return new ItemStack(Material.AIR);
         }
+        // Some callers (e.g. CosmeticBackpackType's cached firstperson item) pass a shared ItemStack
+        // instance that is reused on every tick. This method mutates item's meta below (styleMeta in
+        // particular appends to whatever lore is already there), so without cloning first, a shared
+        // instance would accumulate duplicate lore lines on every call until it exceeds the 256-line cap.
+        item = item.clone();
         if (item.hasItemMeta()) {
             ItemMeta itemMeta = item.getItemMeta();
 
@@ -455,6 +463,17 @@ public class CosmeticUser implements CosmeticHolder {
 
             itemMeta.getPersistentDataContainer().set(HMCCInventoryUtils.getCosmeticKey(), PersistentDataType.STRING, cosmetic.getId());
             itemMeta.getPersistentDataContainer().set(InventoryUtils.getOwnerKey(), PersistentDataType.STRING, getEntity().getUniqueId().toString());
+
+            // Matches the GUI treatment: hide the tooltip lines Minecraft writes by itself ("Dyed",
+            // "When worn: +3 Armor", enchantments, trims) and drop the italics a custom name gets by
+            // default, so an equipped cosmetic's tooltip shows only its own name and lore.
+            itemMeta.addItemFlags(ItemFlag.values());
+            Component displayNameComponent = itemMeta.displayName();
+            if (displayNameComponent != null) {
+                itemMeta.displayName(displayNameComponent.decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+            }
+
+            cosmetic.styleMeta(itemMeta);
 
             item.setItemMeta(itemMeta);
 
@@ -669,6 +688,7 @@ public class CosmeticUser implements CosmeticHolder {
 
     @Override
     public boolean canEquipCosmetic(@NotNull Cosmetic cosmetic, boolean ignoreWardrobe) {
+        if (!cosmetic.isEnabled()) return false;
         if (!cosmetic.requiresPermission()) return true;
         if (isInWardrobe() && !ignoreWardrobe) {
             if (WardrobeSettings.isTryCosmeticsInWardrobe() && userWardrobeManager.getWardrobeStatus().equals(UserWardrobeManager.WardrobeStatus.RUNNING)) return true;
@@ -685,8 +705,14 @@ public class CosmeticUser implements CosmeticHolder {
         Player player = getPlayer();
         if (player == null) return;
         for (final Player p : Bukkit.getOnlinePlayers()) {
+            if (p.equals(player)) continue;
             p.hidePlayer(HMCCosmeticsPlugin.getInstance(), player);
             player.hidePlayer(HMCCosmeticsPlugin.getInstance(), p);
+
+            // hidePlayer() also drops both from each other's tab list on this server; only the
+            // in-world model should disappear, so re-send their tab entries right after hiding.
+            HMCCPacketManager.sendFakePlayerInfoPacket(player, player.getEntityId(), player.getUniqueId(), player.getName(), List.of(p));
+            HMCCPacketManager.sendFakePlayerInfoPacket(p, p.getEntityId(), p.getUniqueId(), p.getName(), List.of(player));
         }
     }
 

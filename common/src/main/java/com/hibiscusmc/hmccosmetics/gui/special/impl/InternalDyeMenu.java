@@ -4,6 +4,9 @@ import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.Settings;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticHolder;
+import com.hibiscusmc.hmccosmetics.gui.Menu;
+import com.hibiscusmc.hmccosmetics.gui.Menus;
+import com.hibiscusmc.hmccosmetics.gui.action.Actions;
 import com.hibiscusmc.hmccosmetics.gui.special.DyeMenu;
 import com.hibiscusmc.hmccosmetics.util.HMCCServerUtils;
 import dev.triumphteam.gui.builder.gui.ChestGuiBuilder;
@@ -22,9 +25,11 @@ import me.lojosho.shaded.configurate.yaml.YamlConfigurationLoader;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,6 +40,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
+
+import static com.hibiscusmc.hmccosmetics.util.MessagesUtil.nexoTags;
 
 public class InternalDyeMenu implements DyeMenu {
 
@@ -50,6 +57,15 @@ public class InternalDyeMenu implements DyeMenu {
 
     private @Nullable ItemStack PRIMARY_COLOR_ITEM = null;
     private @Nullable ItemStack SECONDARY_COLOR_ITEM = null;
+
+    private @Nullable HeaderButton BACK_BUTTON = null;
+    private @Nullable HeaderButton INFO_BUTTON = null;
+
+    /**
+     * One of the two buttons in the menu's header. The back button returns to the menu the viewer came
+     * from; the info button is inert and only carries its lore.
+     */
+    private record HeaderButton(int slot, @NotNull ItemStack item, @NotNull List<String> actions) {}
 
     @Override
     public void reload() {
@@ -81,7 +97,9 @@ public class InternalDyeMenu implements DyeMenu {
 
         PRIMARY_COLORS_SLOTS.clear();
         SECONDARY_COLORS_SLOTS.clear();
-        for (int i = 0; i < (ROWS * 9) - 1; i++) {
+        // Bounded by the format's own length so a row typed with fewer than 9 cells warns instead of throwing.
+        int cells = Math.min(ROWS * 9, formatString.length());
+        for (int i = 0; i < cells; i++) {
             char character = formatString.charAt(i);
             switch (character) {
                 case '$' -> {
@@ -118,8 +136,45 @@ public class InternalDyeMenu implements DyeMenu {
 
         PRIMARY_COLORS = loadColorsFromConfig(config.node("colors"));
 
+        BACK_BUTTON = loadHeaderButton(config.node("back-item"), 0);
+        INFO_BUTTON = loadHeaderButton(config.node("info-item"), 8);
+
         INPUT_SLOT = Settings.getDyeMenuInputSlot();
         OUTPUT_SLOT = Settings.getDyeMenuOutputSlot();
+    }
+
+    /**
+     * Wraps a stack for the menu, hiding the tooltip lines Minecraft writes by itself - "Dyed",
+     * "When worn: +3 Armor", enchantments, trims - so a swatch shows only its own name. Also strips the
+     * italics Minecraft applies to custom item names by default, since the swatches already set their
+     * own decoration and the input/output preview should show the cosmetic's name upright too.
+     */
+    @NotNull
+    private static GuiItem guiItem(@NotNull ItemStack itemStack) {
+        itemStack.editMeta(itemMeta -> {
+            itemMeta.addItemFlags(ItemFlag.values());
+            Component name = itemMeta.displayName();
+            if (name != null) itemMeta.displayName(name.decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+        });
+        return new GuiItem(itemStack);
+    }
+
+    private @Nullable HeaderButton loadHeaderButton(@NotNull ConfigurationNode node, int defaultSlot) {
+        if (node.virtual()) return null;
+
+        try {
+            ItemStack item = ItemSerializer.INSTANCE.deserialize(ItemStack.class, node);
+            if (item == null || item.getType() == Material.AIR) {
+                MessagesUtil.sendDebugMessages("Header button " + node.key() + " in the internal dye menu returned AIR, skipping it", Level.WARNING);
+                return null;
+            }
+
+            List<String> actions = node.node("actions").getList(String.class);
+            return new HeaderButton(node.node("slot").getInt(defaultSlot), item, actions == null ? List.of() : actions);
+        } catch (SerializationException e) {
+            MessagesUtil.sendDebugMessages("Unable to read header button " + node.key() + " in the internal dye menu: " + e.getMessage(), Level.WARNING);
+            return null;
+        }
     }
 
     @Override
@@ -130,7 +185,14 @@ public class InternalDyeMenu implements DyeMenu {
             return;
         }
 
-        Gui gui = new ChestGuiBuilder().rows(ROWS).title(MiniMessage.miniMessage().deserialize(Hooks.processPlaceholders(viewer, Settings.getDyeMenuName()))).create();
+        Component title = MiniMessage.miniMessage().deserialize(Hooks.processPlaceholders(viewer, Settings.getDyeMenuName()), nexoTags());
+        // The default inventory provider legacy-serializes the title, which drops the font a glyph
+        // background is drawn in, so build the inventory straight from the Component.
+        Gui gui = new ChestGuiBuilder()
+                .rows(ROWS)
+                .title(title)
+                .inventory((menuTitle, owner, size) -> Bukkit.createInventory(owner, size, menuTitle))
+                .create();
         gui.setUpdating(true);
         gui.setDefaultClickAction(event -> {
             event.setCancelled(true);
@@ -147,9 +209,30 @@ public class InternalDyeMenu implements DyeMenu {
         });
 
         final ItemStack dyingItemStack = cosmetic.getItem();
+        // The cosmetic's own configured color (its "item.color" in the cosmetics config) is what shows
+        // here before the viewer has touched anything, so it doubles as the picker's initial selection.
+        final Color currentColor = dyingItemStack.hasItemMeta() ? NMSHandlers.getHandler().getUtilHandler().getColor(dyingItemStack) : null;
 
-        gui.setItem(INPUT_SLOT, new GuiItem(dyingItemStack));
-        gui.setItem(OUTPUT_SLOT, new GuiItem(dyingItemStack));
+        gui.setItem(INPUT_SLOT, guiItem(dyingItemStack));
+        gui.setItem(OUTPUT_SLOT, guiItem(dyingItemStack));
+
+        if (BACK_BUTTON != null) {
+            GuiItem backItem = guiItem(BACK_BUTTON.item().clone());
+            backItem.setAction(event -> {
+                event.setCancelled(true);
+                Actions.runActions(viewer, cosmeticHolder, BACK_BUTTON.actions());
+
+                // Reopening runs a tick later, which also gets us out of this click event.
+                Menu previous = Menus.getLastOpened(viewer.getUniqueId());
+                if (previous != null) previous.openMenu(viewer, cosmeticHolder);
+                else gui.close(viewer);
+            });
+            gui.setItem(BACK_BUTTON.slot(), backItem);
+        }
+
+        if (INFO_BUTTON != null) {
+            gui.setItem(INFO_BUTTON.slot(), guiItem(INFO_BUTTON.item().clone()));
+        }
 
         AtomicInteger ran = new AtomicInteger(0);
         PRIMARY_COLORS_SLOTS.forEach(i -> {
@@ -162,54 +245,81 @@ public class InternalDyeMenu implements DyeMenu {
                 return;
             }
             PrimaryColor primaryColor = PRIMARY_COLORS.get(pRan);
+            boolean isCurrentPrimary = matchesBucket(primaryColor, currentColor);
 
             primaryColorItem.setItemMeta(ColorBuilder.color(primaryColorItem.getItemMeta(), primaryColor.color));
             primaryColorItem.editMeta(itemMeta -> {
                 itemMeta.displayName(MiniMessage.miniMessage().deserialize(primaryColor.name()).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
             });
-            GuiItem guiItem = new GuiItem(primaryColorItem);
+            GuiItem guiItem = guiItem(primaryColorItem);
 
             guiItem.setAction(event -> {
                 event.setCancelled(true);
-
-                ItemStack cosmeticItem = cosmetic.getItem();
-                cosmeticItem.setItemMeta(ColorBuilder.color(cosmeticItem.getItemMeta(), primaryColor.color));
-                cosmeticItem.editMeta(itemMeta -> {
-                    //itemMeta.displayName(MiniMessage.miniMessage().deserialize("").decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
-                });
-                gui.updateItem(OUTPUT_SLOT, new GuiItem(cosmeticItem));
-
-                List<SecondaryColor> secondaryColors = primaryColor.secondaryColors();
-                AtomicInteger secondaryRan = new AtomicInteger(0);
-                SECONDARY_COLORS_SLOTS.forEach(slot -> {
-                    int sRan = secondaryRan.getAndAdd(1);
-                    if (sRan >= secondaryColors.size()) {
-                        MessagesUtil.sendDebugMessages("There are less secondary colors than slots for primary color " + primaryColor.name + "!", Level.WARNING);
-                        return;
-                    }
-                    SecondaryColor secondaryColor = secondaryColors.get(sRan);
-
-                    ItemStack secondaryItem = cosmetic.getItem();
-                    if (SECONDARY_COLOR_ITEM != null) secondaryItem = SECONDARY_COLOR_ITEM;
-                    secondaryItem.setItemMeta(ColorBuilder.color(secondaryItem.getItemMeta(), secondaryColor.color));
-                    secondaryItem.editMeta(itemMeta -> {
-                        itemMeta.displayName(MiniMessage.miniMessage().deserialize(secondaryColor.name()).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
-                    });
-                    GuiItem secondaryGuiItem = new GuiItem(secondaryItem);
-                    secondaryGuiItem.setAction(secondaryEvent -> {
-                        ItemStack secondaryItemStack = dyingItemStack.clone();
-                        secondaryItemStack.setItemMeta(ColorBuilder.color(secondaryItemStack.getItemMeta(), secondaryColor.color));
-                        gui.updateItem(OUTPUT_SLOT, new GuiItem(secondaryItemStack));
-                    });
-
-                    gui.updateItem(slot, secondaryGuiItem);
-                });
+                selectPrimaryColor(gui, cosmetic, primaryColor, null);
             });
             gui.setItem(i, guiItem);
+
+            // Pre-selects the bucket the cosmetic's current color already belongs to, so its secondary
+            // row and the output preview are showing before the viewer clicks anything. The exact shade
+            // is passed through so a default that's actually a subcolor (e.g. Azure under Blue) previews
+            // as Azure, not the primary Blue it's filed under.
+            if (isCurrentPrimary) selectPrimaryColor(gui, cosmetic, primaryColor, currentColor);
         });
 
 
         gui.open(viewer);
+    }
+
+    /**
+     * Applies a primary color to the output preview and (re)populates the secondary-color row underneath it.
+     * @param outputColor the exact shade to preview - the primary's own color when the viewer picked it by
+     *                     hand ({@code null}), or the cosmetic's real current color when pre-selecting on
+     *                     open, which may be one of this primary's subcolors rather than the primary itself.
+     */
+    private void selectPrimaryColor(@NotNull Gui gui, @NotNull Cosmetic cosmetic, @NotNull PrimaryColor primaryColor, @Nullable Color outputColor) {
+        ItemStack cosmeticItem = cosmetic.getItem();
+        cosmeticItem.setItemMeta(ColorBuilder.color(cosmeticItem.getItemMeta(), outputColor != null ? outputColor : primaryColor.color));
+        gui.updateItem(OUTPUT_SLOT, guiItem(cosmeticItem));
+
+        List<SecondaryColor> secondaryColors = primaryColor.secondaryColors();
+        AtomicInteger secondaryRan = new AtomicInteger(0);
+        SECONDARY_COLORS_SLOTS.forEach(slot -> {
+            int sRan = secondaryRan.getAndAdd(1);
+            if (sRan >= secondaryColors.size()) {
+                MessagesUtil.sendDebugMessages("There are less secondary colors than slots for primary color " + primaryColor.name + "!", Level.WARNING);
+                return;
+            }
+            SecondaryColor secondaryColor = secondaryColors.get(sRan);
+
+            ItemStack secondaryItem = cosmetic.getItem();
+            if (SECONDARY_COLOR_ITEM != null) secondaryItem = SECONDARY_COLOR_ITEM;
+            secondaryItem.setItemMeta(ColorBuilder.color(secondaryItem.getItemMeta(), secondaryColor.color));
+            secondaryItem.editMeta(itemMeta -> {
+                itemMeta.displayName(MiniMessage.miniMessage().deserialize(secondaryColor.name()).decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE));
+            });
+            GuiItem secondaryGuiItem = guiItem(secondaryItem);
+            secondaryGuiItem.setAction(secondaryEvent -> {
+                ItemStack secondaryItemStack = cosmetic.getItem();
+                secondaryItemStack.setItemMeta(ColorBuilder.color(secondaryItemStack.getItemMeta(), secondaryColor.color));
+                gui.updateItem(OUTPUT_SLOT, guiItem(secondaryItemStack));
+            });
+
+            gui.updateItem(slot, secondaryGuiItem);
+        });
+    }
+
+    private static boolean colorsEqual(@NotNull Color a, @NotNull Color b) {
+        return a.asRGB() == b.asRGB();
+    }
+
+    /** Whether {@code color} is this primary's own shade or one of its secondary shades. */
+    private static boolean matchesBucket(@NotNull PrimaryColor primaryColor, @Nullable Color color) {
+        if (color == null) return false;
+        if (colorsEqual(primaryColor.color(), color)) return true;
+        for (SecondaryColor secondaryColor : primaryColor.secondaryColors()) {
+            if (colorsEqual(secondaryColor.color(), color)) return true;
+        }
+        return false;
     }
 
     /**
@@ -242,10 +352,9 @@ public class InternalDyeMenu implements DyeMenu {
      * Parses a single primary color from a configuration node
      */
     private static PrimaryColor parsePrimaryColor(ConfigurationNode node) {
-        // Get primary color name (with MiniMessage formatting)
+        // Kept as the raw MiniMessage string - swatch display names are built by re-deserializing this,
+        // so stripping it down to plain text here would silently swallow the configured color.
         String nameWithFormatting = node.node("name").getString("");
-        Component nameComponent = MiniMessage.miniMessage().deserialize(nameWithFormatting);
-        String plainName = extractPlainText(nameComponent);
 
         // Get primary color hex value
         String colorHex = node.node("color").getString("#FFFFFF");
@@ -268,32 +377,21 @@ public class InternalDyeMenu implements DyeMenu {
             }
         }
 
-        return new PrimaryColor(plainName, primaryColor, secondaryColors);
+        return new PrimaryColor(nameWithFormatting, primaryColor, secondaryColors);
     }
 
     /**
      * Parses a single secondary color from a configuration node
      */
     private static SecondaryColor parseSecondaryColor(ConfigurationNode node) {
-        // Get secondary color name (with MiniMessage formatting)
+        // Kept as the raw MiniMessage string, same reasoning as parsePrimaryColor above.
         String nameWithFormatting = node.node("name").getString("");
-        Component nameComponent = MiniMessage.miniMessage().deserialize(nameWithFormatting);
-        String plainName = extractPlainText(nameComponent);
 
         // Get secondary color hex value
         String colorHex = node.node("color").getString("#FFFFFF");
         Color secondaryColor = HMCCServerUtils.hex2Rgb(colorHex);
 
-        return new SecondaryColor(plainName, secondaryColor);
-    }
-
-    /**
-     * Extracts plain text from a Component (removes MiniMessage formatting)
-     */
-    private static String extractPlainText(Component component) {
-        // Use PlainTextComponentSerializer to extract plain text
-        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                .serialize(component);
+        return new SecondaryColor(nameWithFormatting, secondaryColor);
     }
 
 

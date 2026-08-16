@@ -10,6 +10,21 @@ primary-color-item:
 secondary-color-item:
   material: LEATHER_HORSE_ARMOR
 
+# Optional header buttons. Back returns to the menu the cosmetic was clicked in, info is inert and
+# only carries its lore. Delete a block to leave that slot empty; "slot" defaults to 0 and 8.
+# back-item:
+#   slot: 0
+#   material: ARROW
+#   name: "<white>Back"
+#   actions:
+#     - "[SOUND] minecraft:block.note_block.hat 1 1"
+# info-item:
+#   slot: 8
+#   material: BOOK
+#   name: "<white>Info"
+#   lore:
+#     - "<gray>Pick a base color, then a shade."
+
 # $ = Primary Colors
 # % = Secondary Colors
 format:

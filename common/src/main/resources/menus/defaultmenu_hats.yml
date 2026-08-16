@@ -1,5 +1,42 @@
 title: "<white>"
 rows: 6
+
+# Optional. Add a "pagination" block and any number of items can share a fixed set of slots, a page at
+# a time. Items opt in with "paginated: true" and drop their own "slots"; they fill the slots below in
+# the order they are written here.
+#
+# The title fragments are for packs that paint the arrows and the page counter into the menu
+# background, which is why they are shifts and glyphs rather than items. They are appended to "title"
+# in this order every time the page changes: title-reset, then the previous arrow in its enabled or
+# disabled form, then the next arrow, then the counter. Leave them out for a plain paginated menu; the
+# previous/next items are what actually gets clicked either way.
+#
+# pagination:
+#   slots:
+#     - 18-44
+#   previous-slots:
+#     - 45-46
+#   next-slots:
+#     - 52-53
+#   title-reset: "<shift:-176>"
+#   previous: "<shift:7><glyph:page_previous>"
+#   previous-disabled: "<shift:36>"
+#   next: "<shift:103><glyph:page_next>"
+#   next-disabled: "<shift:132>"
+#   # %page% and %pages% are replaced with the current page and the page count.
+#   indicator: "<white>%page%/%pages%"
+#   # Pixels the counter is nudged by, on top of being centred on its own width.
+#   indicator-offset: -82
+#   previous-item:
+#     material: PAPER
+#     name: "<white>Previous Page"
+#   next-item:
+#     material: PAPER
+#     name: "<white>Next Page"
+#   # Run whenever the page changes.
+#   actions:
+#     - "[SOUND] minecraft:block.note_block.hat 1 1"
+
 items:
   beanie:
     slots:
@@ -46,7 +83,7 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_hats"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"
   button_backpacks_menu:
     slots:
       - 18
@@ -59,7 +96,7 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_backpacks"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"
   button_hand_menu:
     slots:
       - 27
@@ -72,7 +109,7 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_hands"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"
   button_balloon_menu:
     slots:
       - 36
@@ -85,4 +122,4 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_balloons"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"

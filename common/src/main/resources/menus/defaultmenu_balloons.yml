@@ -35,7 +35,7 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_backpacks"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"
   button_hand_menu:
     slots:
       - 36
@@ -48,7 +48,7 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_hands"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"
   button_balloon_menu:
     slots:
       - 0
@@ -61,7 +61,7 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_balloons"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"
   button_hats_menu:
     slots:
       - 18
@@ -74,4 +74,4 @@ items:
     actions:
       any:
         - "[MENU] defaultmenu_hats"
-        - "[SOUND] minecraft:ui.button.click 1 1"
+        - "[SOUND] minecraft:block.note_block.hat 1 1"

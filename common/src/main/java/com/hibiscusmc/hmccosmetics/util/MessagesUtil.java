@@ -138,8 +138,11 @@ public class MessagesUtil {
      * These are handed to MiniMessage as resolvers rather than pre-parsed into the string, because
      * pre-parsing round-trips through the serializer and escapes every tag MiniMessage does not
      * know, which would break the {@code <cosmetic>} style placeholders passed in alongside.
+     * <p>
+     * Menu titles need these just as much as messages do, since the GUI backgrounds are glyphs
+     * drawn inside the title, so this is public rather than private to the messaging path.
      */
-    private static TagResolver nexoTags() {
+    public static TagResolver nexoTags() {
         if (!Bukkit.getPluginManager().isPluginEnabled("Nexo")) return TagResolver.empty();
         return nexoResolvers();
     }

@@ -177,6 +177,7 @@ public class TypeCosmetic extends Type {
             MessagesUtil.sendDebugMessages("Equipped Item: " + itemStack);
             if (itemStack.hasItemMeta()) itemStack.setItemMeta(processItemMeta(viewer, itemStack.getItemMeta()));
             else MessagesUtil.sendDebugMessages("ItemStack has no ItemMeta in equipped item?");
+            itemStack.editMeta(cosmetic::styleMeta);
             return itemStack;
         }
 
@@ -198,8 +199,10 @@ public class TypeCosmetic extends Type {
             }
             if (itemStack.hasItemMeta()) itemStack.setItemMeta(processItemMeta(viewer, itemStack.getItemMeta()));
             else MessagesUtil.sendDebugMessages("ItemStack has no ItemMeta in locked item?");
+            itemStack.editMeta(cosmetic::styleMeta);
             return itemStack;
         }
+        itemStack.editMeta(cosmetic::styleMeta);
         return itemStack;
     }
 }

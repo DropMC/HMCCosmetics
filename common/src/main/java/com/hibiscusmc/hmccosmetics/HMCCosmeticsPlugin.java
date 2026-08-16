@@ -248,22 +248,16 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         // Dye Menu Reload
         DyeMenuProvider.reload();
 
-        // For reloads
-        /*
+        // Cosmetics that were just disabled shouldn't stay equipped on whoever already has them on.
         for (Player player : Bukkit.getOnlinePlayers()) {
             CosmeticUser user = CosmeticUsers.getUser(player.getUniqueId());
             if (user == null) continue;
-            for (Cosmetic cosmetic : user.getCosmetic()) {
-                Color color = user.getCosmeticColor(cosmetic.getSlot());
-                Cosmetic newCosmetic = Cosmetics.getCosmetic(cosmetic.getId());
-                user.removeCosmeticSlot(cosmetic);
-
-                if (newCosmetic == null) continue;
-                user.addPlayerCosmetic(newCosmetic, color);
+            for (Cosmetic cosmetic : user.getCosmetics()) {
+                if (cosmetic.isEnabled()) continue;
+                user.removeCosmeticSlot(cosmetic.getSlot());
+                user.updateCosmetic(cosmetic.getSlot());
             }
-            user.updateCosmetic();
         }
-         */
 
         getInstance().getLogger().info("Successfully Enabled HMCCosmetics");
         getInstance().getLogger().info(Cosmetics.values().size() + " Cosmetics Successfully Setup");
