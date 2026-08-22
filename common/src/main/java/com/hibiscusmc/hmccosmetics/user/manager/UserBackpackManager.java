@@ -31,6 +31,13 @@ public class UserBackpackManager {
     private boolean backpackHidden;
     @Getter
     private final int invisibleArmorStand;
+    /**
+     * Fixed for the life of the backpack, because it is the stand's team entry: a team lists anything
+     * that is not a player by UUID, so respawning the stand for a new viewer under a fresh random one
+     * would leave that viewer's copy outside the aura's team, and uncolored.
+     */
+    @Getter
+    private final UUID armorStandUuid = UUID.randomUUID();
     private ArrayList<Integer> particleCloud = new ArrayList<>();
     @Getter
     private final CosmeticUser user;
@@ -67,7 +74,7 @@ public class UserBackpackManager {
         final List<PacketWrapper> outsideBundle = new ArrayList<>(16);
         final List<PacketWrapper> ownerBundle = new ArrayList<>(16);
 
-        outsideBundle.addAll(HMCCPacketManager.getInvisibleArmorStand(getFirstArmorStandId(), location, UUID.randomUUID()));
+        outsideBundle.addAll(HMCCPacketManager.getInvisibleArmorStand(getFirstArmorStandId(), location, armorStandUuid, user.hasAura()));
 
         double scaleValue = 1;
         if (user.getPlayer() != null) {

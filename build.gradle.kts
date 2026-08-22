@@ -66,6 +66,9 @@ allprojects {
 
         // Nexo
         maven("https://repo.nexomc.com/releases")
+
+        // PacketEvents
+        maven("https://repo.codemc.io/repository/maven-releases/")
     }
 
     dependencies {
@@ -94,6 +97,10 @@ allprojects {
         testCompileOnly("org.projectlombok:lombok:1.18.36")
         testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
         compileOnly("com.nexomc:nexo:1.24.0")
+        // Only used to repaint the wardrobe mannequin's team (see HookPacketEvents). Pinned to the
+        // version survival-root builds against; the server runs a newer one and the team wrapper's
+        // signatures are unchanged between them.
+        compileOnly("com.github.retrooper:packetevents-spigot:2.9.5")
 
         implementation("dev.triumphteam:triumph-gui:3.2.0-SNAPSHOT") {
             exclude("net.kyori") // Already have adventure API
@@ -175,7 +182,7 @@ bukkit {
     apiVersion = "1.20"
     authors = listOf("LoJoSho")
     depend = listOf("HibiscusCommons")
-    softDepend = listOf("Nexo", "BetterHud", "ModelEngine", "Oraxen", "ItemsAdder", "Geary", "HMCColor", "WorldGuard", "MythicMobs", "PlaceholderAPI", "SuperVanish", "PremiumVanish", "LibsDisguises", "Denizen", "MMOItems", "Eco")
+    softDepend = listOf("Nexo", "BetterHud", "ModelEngine", "Oraxen", "ItemsAdder", "Geary", "HMCColor", "WorldGuard", "MythicMobs", "PlaceholderAPI", "SuperVanish", "PremiumVanish", "LibsDisguises", "Denizen", "MMOItems", "Eco", "TAB", "packetevents")
     version = "${project.version}"
 
     commands {

@@ -67,9 +67,17 @@ public class UserWardrobeManager {
     @Setter
     @Getter
     private WardrobeStatus wardrobeStatus;
+    /**
+     * The tab and page to come back to while the player is inside this wardrobe. Stepping out of the
+     * menu to look at the mannequin and clicking to reopen it lands on the same place rather than on
+     * the default menu, and both are forgotten on leaving, since the manager goes with the session.
+     */
     @Getter
     @Setter
     private Menu lastOpenMenu;
+    @Getter
+    @Setter
+    private int lastOpenPage = 1;
 
     private NMSPacketBuilder packetBuilder = NMSHandlers.getHandler().getPacketBuilder();
     private NMSPacketSender packetSender = NMSHandlers.getHandler().getPacketSender();
@@ -211,6 +219,9 @@ public class UserWardrobeManager {
             this.active = true;
             update();
             setWardrobeStatus(WardrobeStatus.RUNNING);
+            // The aura is drawn on whichever entity the wearer is looking at, which just became the
+            // mannequin. Without this the preview only appears on the next user tick.
+            user.refreshAura();
         };
 
 

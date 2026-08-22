@@ -25,7 +25,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Getter
 public class CosmeticBackpackType extends Cosmetic implements CosmeticUpdateBehavior, CosmeticMovementBehavior {
@@ -70,7 +69,7 @@ public class CosmeticBackpackType extends Cosmetic implements CosmeticUpdateBeha
         final ArrayList<PacketWrapper> newViewerBundle = new ArrayList<>();
 
         if(!newViewers.isEmpty()) {
-            newViewerBundle.addAll(HMCCPacketManager.getInvisibleArmorStand(firstArmorStandId, entityLocation, UUID.randomUUID()));
+            newViewerBundle.addAll(HMCCPacketManager.getInvisibleArmorStand(firstArmorStandId, entityLocation, backpackManager.getArmorStandUuid(), user.hasAura()));
             newViewerBundle.add(packetBuilder.buildEntityEquipmentSlotUpdatePacket(firstArmorStandId, Map.of(EquipmentSlot.HEAD, user.getUserCosmeticItem(this, getItem()))));
 
             if (user.getPlayer() != null) {

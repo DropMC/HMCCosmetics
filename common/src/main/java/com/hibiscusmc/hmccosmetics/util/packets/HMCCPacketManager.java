@@ -110,10 +110,24 @@ public class HMCCPacketManager {
             Location location,
             UUID uuid
     ) {
+        return getInvisibleArmorStand(entityId, location, uuid, false);
+    }
+
+    /**
+     * @param glowing whether the stand carries the aura outline, which has to be part of the metadata
+     *                it spawns with: this is the packet every new viewer is caught up with, so a bit
+     *                added afterwards would be dropped again by the next viewer that walks up.
+     */
+    public static List<PacketWrapper> getInvisibleArmorStand(
+            int entityId,
+            Location location,
+            UUID uuid,
+            boolean glowing
+    ) {
         NMSPacketBuilder packetBuilder = NMSHandlers.getHandler().getPacketBuilder();
         List<PacketWrapper> packets = new ArrayList<>();
         packets.add(packetBuilder.buildEntitySpawnPacket(entityId, uuid, EntityType.ARMOR_STAND, location));
-        packets.add(packetBuilder.buildEntityMetadataPacket(entityId, getInvisibleArmorStandData()));
+        packets.add(packetBuilder.buildEntityMetadataPacket(entityId, getInvisibleArmorStandData(glowing)));
         return packets;
         //NMSHandlers.getHandler().getPacketSender().sendBundle(packets, sendTo);
     }
@@ -132,7 +146,20 @@ public class HMCCPacketManager {
     }
 
     public static Map<Integer, Number> getInvisibleArmorStandData() {
-        return Map.of(0, getMask(), 15, (byte) 0x10);
+        return getInvisibleArmorStandData(false);
+    }
+
+    public static Map<Integer, Number> getInvisibleArmorStandData(boolean glowing) {
+        return Map.of(0, getArmorStandFlags(glowing), 15, (byte) 0x10);
+    }
+
+    /**
+     * Index 0 for a cosmetic's armor stand: invisible, optionally lit by the darkness workaround, and
+     * optionally glowing for the aura. The stand's own body stays invisible either way; what the
+     * outline is drawn around is the cosmetic it wears on its head.
+     */
+    public static byte getArmorStandFlags(boolean glowing) {
+        return (byte) (getMask() | (glowing ? 0x40 : 0x00));
     }
 
     private static byte getMask() {
@@ -246,6 +273,48 @@ public class HMCCPacketManager {
         // https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata#Avatar
         if (NMSHandlers.getVersion().isLowerOrEqual(MinecraftVersion.v1_21_8)) NMSHandlers.getHandler().getPacketBuilder().buildEntityMetadataPacket(playerId, getPlayerOverlayMetaData()).sendPacket(sendTo);
         else NMSHandlers.getHandler().getPacketBuilder().buildEntityMetadataPacket(playerId, getPlayerOverlayMetaData()).sendPacket(sendTo);
+    }
+
+    /**
+     * Sends the shared entity flag byte (metadata index 0), which is what carries the glowing bit the
+     * aura cosmetic is drawn from.
+     */
+    public static void sendEntityFlagsPacket(
+            final int entityId,
+            final byte flags,
+            final @NotNull List<Player> sendTo
+    ) {
+        NMSHandlers.getHandler().getPacketBuilder().buildEntityMetadataPacket(entityId, Map.of(0, flags)).sendPacket(sendTo);
+    }
+
+    /**
+     * Rebuilds index 0 from {@code player}'s current state, with the glowing bit forced on or off.
+     * <p>
+     * The byte is all or nothing: sending it carrying only the glowing bit would also tell the client
+     * the player stopped sneaking, sprinting and burning, so every state the server tracks in it has
+     * to be folded back in on each send. By the same token this belongs only to packets aimed at that
+     * player's own entity, never at a stand-in entity that has state of its own (see
+     * {@link #getGlowOnlyFlags}).
+     */
+    public static byte getEntityFlags(final @NotNull Player player, final boolean glowing) {
+        byte flags = 0;
+        if (player.getFireTicks() > 0) flags |= 0x01;
+        if (player.isSneaking()) flags |= 0x02;
+        if (player.isSprinting()) flags |= 0x08;
+        if (player.isSwimming()) flags |= 0x10;
+        if (player.isInvisible()) flags |= 0x20;
+        if (glowing) flags |= 0x40;
+        if (player.isGliding()) flags |= (byte) 0x80;
+        return flags;
+    }
+
+    /**
+     * Index 0 for an entity that carries no state of its own, such as the wardrobe mannequin: nothing
+     * but the glowing bit. Copying the wearer's byte onto the mannequin would hand it the wearer's
+     * invisibility, which the wardrobe turns on for as long as they are inside it.
+     */
+    public static byte getGlowOnlyFlags(final boolean glowing) {
+        return glowing ? (byte) 0x40 : 0;
     }
 
     public static Map<Integer, Number> getPlayerOverlayMetaData() {

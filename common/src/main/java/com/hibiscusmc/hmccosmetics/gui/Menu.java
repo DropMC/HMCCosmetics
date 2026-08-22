@@ -14,6 +14,7 @@ import com.hibiscusmc.hmccosmetics.gui.type.Type;
 import com.hibiscusmc.hmccosmetics.gui.type.Types;
 import com.hibiscusmc.hmccosmetics.gui.type.types.TypeCosmetic;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
+import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import dev.triumphteam.gui.builder.item.ItemBuilder;
 import dev.triumphteam.gui.guis.Gui;
@@ -305,7 +306,11 @@ public class Menu {
         // rather than pushed later: updating a title replaces the inventory, which cannot be done
         // while the menu is still opening.
         PageState state = new PageState();
+        state.page = wardrobeEntryPage(cosmeticHolder);
         state.title = pagination == null ? this.title : this.title + paginationTitle(state);
+        // paginationTitle clamps the page it was handed, which matters when the remembered page no
+        // longer exists because the menu got shorter (a cosmetic disabled, a permission lost).
+        rememberWardrobePage(cosmeticHolder, state.page);
 
         // Deliberately not .type(GuiType.CHEST): that swaps the chest builder for a typed one, whose
         // container reports a single row, so every slot from 9 up fails validateSlot(). The custom
@@ -563,6 +568,26 @@ public class Menu {
         return Cosmetics.getCosmetic(item.itemConfig().node("cosmetic").getString(""));
     }
 
+    /**
+     * Marks this menu as the one to reopen inside the wardrobe and answers the page to open it at: the
+     * page it was left on when it is the same menu, otherwise the first. Menus opened outside a
+     * wardrobe keep no such memory and always start at page one.
+     */
+    private int wardrobeEntryPage(@NotNull CosmeticHolder cosmeticHolder) {
+        if (!(cosmeticHolder instanceof CosmeticUser user) || !user.isInWardrobe()) return 1;
+
+        UserWardrobeManager wardrobe = user.getWardrobeManager();
+        int page = wardrobe.getLastOpenMenu() == this ? wardrobe.getLastOpenPage() : 1;
+        wardrobe.setLastOpenMenu(this);
+        wardrobe.setLastOpenPage(page);
+        return page;
+    }
+
+    private void rememberWardrobePage(@NotNull CosmeticHolder cosmeticHolder, int page) {
+        if (!(cosmeticHolder instanceof CosmeticUser user) || !user.isInWardrobe()) return;
+        user.getWardrobeManager().setLastOpenPage(page);
+    }
+
     private void placePageButtons(Player viewer, CosmeticHolder cosmeticHolder, Gui gui, PageState state,
                                   @NotNull List<Integer> slots, @Nullable ItemStack button, int step, boolean enabled) {
         if (button == null) return;
@@ -572,6 +597,7 @@ public class Menu {
             guiItem.setAction(event -> {
                 if (!enabled) return;
                 state.page += step;
+                rememberWardrobePage(cosmeticHolder, state.page);
                 Actions.runActions(viewer, cosmeticHolder, pagination.actions());
                 updateMenu(viewer, cosmeticHolder, gui, state);
             });

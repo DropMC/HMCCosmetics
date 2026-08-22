@@ -13,10 +13,12 @@ import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.behavior.CosmeticMovementBehavior;
 import com.hibiscusmc.hmccosmetics.cosmetic.behavior.CosmeticUpdateBehavior;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticArmorType;
+import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticAuraType;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBackpackType;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
 import com.hibiscusmc.hmccosmetics.database.UserData;
-import com.hibiscusmc.hmccosmetics.gui.Menus;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookPacketEvents;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookTAB;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBackpackManager;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBalloonManager;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
@@ -31,6 +33,7 @@ import me.lojosho.hibiscuscommons.util.InventoryUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -65,6 +68,13 @@ public class CosmeticUser implements CosmeticHolder {
     // Cosmetic Settings/Toggles
     private final ArrayList<HiddenReason> hiddenReason = new ArrayList<>();
     private final HashMap<CosmeticSlot, Color> colors = new HashMap<>();
+
+    /** Last entity flag byte sent for the aura, or null when none is applied. See {@link #refreshAuraOnStateChange()}. */
+    private Byte lastAuraFlags;
+    /** Whether the aura still owes a second send, to land after the server's own byte for this tick. */
+    private boolean auraResendPending;
+    /** Entity id registered for glow interception, or -1. Kept so it can be dropped without the player. */
+    private int auraEntityId = -1;
 
     @Getter @Setter
     @ApiStatus.Internal
@@ -221,6 +231,7 @@ public class CosmeticUser implements CosmeticHolder {
 
         despawnBackpack();
         despawnBalloon();
+        clearAura();
     }
 
     @Override
@@ -260,6 +271,9 @@ public class CosmeticUser implements CosmeticHolder {
                 CosmeticBalloonType balloonType = (CosmeticBalloonType) cosmetic;
                 spawnBalloon(balloonType);
             }
+            if (cosmetic.getSlot() == CosmeticSlot.AURA) {
+                refreshAura();
+            }
         }
         // API
         PlayerCosmeticPostEquipEvent postEquipEvent = new PlayerCosmeticPostEquipEvent(this, cosmetic);
@@ -296,6 +310,9 @@ public class CosmeticUser implements CosmeticHolder {
         }
         if (slot == CosmeticSlot.BALLOON) {
             despawnBalloon();
+        }
+        if (slot == CosmeticSlot.AURA) {
+            clearAura();
         }
         colors.remove(slot);
         playerCosmetics.remove(slot);
@@ -558,7 +575,6 @@ public class CosmeticUser implements CosmeticHolder {
         MessagesUtil.sendDebugMessages("Leaving Wardrobe");
 
         userWardrobe.setWardrobeStatus(UserWardrobeManager.WardrobeStatus.STOPPING);
-        userWardrobe.setLastOpenMenu(Menus.getDefaultMenu());
 
         if (WardrobeSettings.isEnabledTransition() && !ejected) {
             MessagesUtil.sendTitle(
@@ -571,10 +587,12 @@ public class CosmeticUser implements CosmeticHolder {
             Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> {
                 userWardrobeManager.end();
                 userWardrobeManager = null;
+                refreshAura();
             }, WardrobeSettings.getTransitionDelay());
         } else {
             userWardrobeManager.end();
             userWardrobeManager = null;
+            refreshAura();
         }
     }
 
@@ -590,6 +608,9 @@ public class CosmeticUser implements CosmeticHolder {
         if (this.userBackpackManager != null) return;
         this.userBackpackManager = new UserBackpackManager(this);
         userBackpackManager.spawnBackpack(cosmeticBackpackType);
+        // The stand spawns already glowing when an aura is on, but its team is what colors it, and
+        // that only reaches this backpack's own UUID once the aura is pushed again.
+        refreshAura();
     }
 
     public void despawnBackpack() {
@@ -624,6 +645,159 @@ public class CosmeticUser implements CosmeticHolder {
         if (this.userBalloonManager == null) return;
         this.userBalloonManager.remove();
         this.userBalloonManager = null;
+    }
+
+    /**
+     * Re-asserts the wearer's aura to everyone currently in range: its color through TAB (which no-ops
+     * when the color is already the one applied) and its glowing bit through a metadata packet. Called
+     * on equip, on unhide and on every user tick, the last of which is what reaches players who have
+     * only just come into range.
+     */
+    public void refreshAura() {
+        if (!(getCosmetic(CosmeticSlot.AURA) instanceof CosmeticAuraType aura)) return;
+
+        Player player = getPlayer();
+        if (player == null) return;
+
+        HookTAB.setGlowColor(player, aura.getColor());
+        paintMannequinTeam(player, aura.getColor());
+        trackAuraGlow(player);
+        sendAuraGlow(player, true);
+        sendBackpackAura(aura.getColor());
+    }
+
+    /** Whether an aura is equipped and currently being drawn. */
+    public boolean hasAura() {
+        return !isHidden() && hasCosmeticInSlot(CosmeticSlot.AURA);
+    }
+
+    private void trackAuraGlow(@NotNull Player player) {
+        auraEntityId = player.getEntityId();
+        HookPacketEvents.trackGlow(auraEntityId);
+    }
+
+    /** Kept by id rather than looked up again, so this still works for a player already on their way out. */
+    private void untrackAuraGlow() {
+        if (auraEntityId == -1) return;
+
+        HookPacketEvents.untrackGlow(auraEntityId);
+        auraEntityId = -1;
+    }
+
+    /**
+     * Lights the backpack up along with its wearer, so the two read as one silhouette.
+     *
+     * <p>A backpack is an invisible armor stand carrying the cosmetic on its head, and the outline of a
+     * glowing entity is drawn around whatever it wears, so the same metadata bit does the job. The
+     * color cannot come from the wearer's team though, since that one only paints the wearer: the
+     * stand gets a team of ours, which TAB has no interest in because its only member is not a
+     * player.</p>
+     *
+     * @param color the aura color, or null to put the backpack back to normal
+     */
+    private void sendBackpackAura(@Nullable ChatColor color) {
+        if (userBackpackManager == null) return;
+
+        List<Player> viewers = userBackpackManager.getEntityManager().getViewers();
+        int armorStandId = userBackpackManager.getFirstArmorStandId();
+        String teamName = auraTeamName();
+
+        HMCCPacketManager.sendEntityFlagsPacket(armorStandId, HMCCPacketManager.getArmorStandFlags(color != null), viewers);
+
+        if (color == null) {
+            HookPacketEvents.removeTeam(viewers, teamName);
+            return;
+        }
+        HookPacketEvents.createTeam(viewers, teamName, color, List.of(userBackpackManager.getArmorStandUuid().toString()));
+    }
+
+    /** Short enough to stay within the sixteen characters older clients accept for a team name. */
+    private String auraTeamName() {
+        return "aura_" + uniqueId.toString().substring(0, 8);
+    }
+
+    /**
+     * Re-sends the aura only when the wearer's flag byte has changed since the last send.
+     *
+     * <p>The glowing bit shares metadata index 0 with sneaking, sprinting, burning, swimming and
+     * gliding. Every one of those transitions makes the server write that byte itself, which drops the
+     * bit, so an aura left to the once-a-second refresh visibly blinks out on each of them. Comparing
+     * the byte every tick catches all of them, including the ones no event announces, and costs a
+     * packet only when something actually moved.</p>
+     *
+     * <p>The change is answered twice, this tick and the next, because of where in the tick this runs:
+     * the scheduler fires before the entity tracker flushes dirty metadata, so on the tick a flag
+     * changes our packet goes out first and the server's own byte lands on top of it and wins. The
+     * second send is the one that sticks. Sending only once looks fine in a debugger and blinks for a
+     * full second in game, since by then the compare below is happy and stays quiet.</p>
+     */
+    public void refreshAuraOnStateChange() {
+        if (isHidden() || !hasCosmeticInSlot(CosmeticSlot.AURA)) return;
+
+        Player player = getPlayer();
+        if (player == null) return;
+
+        byte flags = auraFlags(player, true);
+        boolean changed = lastAuraFlags == null || lastAuraFlags != flags;
+        if (!changed && !auraResendPending) return;
+
+        sendAuraGlow(player, true);
+        auraResendPending = changed;
+    }
+
+    /** Drops the glowing bit on the client and hands the nametag prefix back to TAB. */
+    public void clearAura() {
+        // Ahead of everything else: while the entity is still tracked, the packet sent below to put the
+        // bit out would be caught on its way to the client and have the bit put straight back in.
+        untrackAuraGlow();
+
+        Player player = getPlayer();
+        if (player == null) return;
+
+        HookTAB.clearGlowColor(player);
+        paintMannequinTeam(player, null);
+        sendAuraGlow(player, false);
+        sendBackpackAura(null);
+        lastAuraFlags = null;
+        auraResendPending = false;
+    }
+
+    /**
+     * Recolors the wardrobe mannequin's team, which is what an aura previews through while its wearer
+     * is inside the wardrobe. Does nothing outside it, and nothing before the mannequin exists: the
+     * wardrobe names it only once its opening transition has played out.
+     */
+    private void paintMannequinTeam(@NotNull Player player, @Nullable ChatColor color) {
+        if (!isInWardrobe()) return;
+
+        String npcName = userWardrobeManager.getNpcName();
+        if (npcName == null) return;
+
+        HookPacketEvents.setTeamColor(player, npcName, color);
+    }
+
+    private void sendAuraGlow(@NotNull Player player, boolean glowing) {
+        byte flags = auraFlags(player, glowing);
+        lastAuraFlags = flags;
+
+        if (isInWardrobe()) {
+            HMCCPacketManager.sendEntityFlagsPacket(userWardrobeManager.getNPC_ID(), flags, List.of(player));
+            return;
+        }
+
+        HMCCPacketManager.sendEntityFlagsPacket(player.getEntityId(), flags, HMCCPacketManager.getViewers(player.getLocation()));
+    }
+
+    /**
+     * In the wardrobe the wearer's own entity is hidden and what they are looking at is the mannequin,
+     * so the packet names that entity instead and only they receive it. The mannequin has no state of
+     * its own to preserve, and it must not inherit the wearer's: the wardrobe makes the wearer
+     * invisible while they are inside it, and copying that byte over would make the mannequin vanish.
+     */
+    private byte auraFlags(@NotNull Player player, boolean glowing) {
+        return isInWardrobe()
+                ? HMCCPacketManager.getGlowOnlyFlags(glowing)
+                : HMCCPacketManager.getEntityFlags(player, glowing);
     }
 
     public void respawnBackpack() {
@@ -742,6 +916,9 @@ public class CosmeticUser implements CosmeticHolder {
         if (hasCosmeticInSlot(CosmeticSlot.BACKPACK)) {
             despawnBackpack();
         }
+        if (hasCosmeticInSlot(CosmeticSlot.AURA)) {
+            clearAura();
+        }
         updateCosmetic();
         MessagesUtil.sendDebugMessages("HideCosmetics");
     }
@@ -778,6 +955,9 @@ public class CosmeticUser implements CosmeticHolder {
             CosmeticBackpackType cosmeticBackpackType = (CosmeticBackpackType) getCosmetic(CosmeticSlot.BACKPACK);
             ItemStack item = getUserCosmeticItem(cosmeticBackpackType);
             userBackpackManager.setItem(item);
+        }
+        if (hasCosmeticInSlot(CosmeticSlot.AURA)) {
+            refreshAura();
         }
         updateCosmetic();
         MessagesUtil.sendDebugMessages("ShowCosmetics");

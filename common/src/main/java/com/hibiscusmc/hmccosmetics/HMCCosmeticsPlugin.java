@@ -17,6 +17,8 @@ import com.hibiscusmc.hmccosmetics.gui.special.impl.HMCColorDyeMenu;
 import com.hibiscusmc.hmccosmetics.gui.special.impl.InternalDyeMenu;
 import com.hibiscusmc.hmccosmetics.hooks.items.HookHMCCosmetics;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookBetterHud;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookPacketEvents;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookTAB;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookVulcan;
 import com.hibiscusmc.hmccosmetics.hooks.placeholders.HMCPlaceholderExpansion;
 import com.hibiscusmc.hmccosmetics.hooks.resourcepack.HookNexo;
@@ -24,6 +26,7 @@ import com.hibiscusmc.hmccosmetics.hooks.worldguard.WGHook;
 import com.hibiscusmc.hmccosmetics.hooks.worldguard.WGListener;
 import com.hibiscusmc.hmccosmetics.listener.*;
 import com.hibiscusmc.hmccosmetics.packets.CosmeticPacketInterface;
+import com.hibiscusmc.hmccosmetics.user.AuraTicker;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.util.search.PlayerSearchManager;
@@ -64,6 +67,8 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         new HookHMCCosmetics();
         new HookBetterHud();
         new HookVulcan();
+        new HookTAB();
+        new HookPacketEvents();
     }
 
     @Override
@@ -138,6 +143,11 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         if (Bukkit.getPluginManager().isPluginEnabled("Nexo")) {
             getServer().getPluginManager().registerEvents(new HookNexo(), this);
         }
+        // Aura glow upkeep. Editing the flag byte on its way out is seamless and makes the ticker
+        // pointless, so the ticker is only there for a server without PacketEvents.
+        HookPacketEvents.startGlowInterception();
+        if (!HookPacketEvents.isGlowInterceptionActive()) AuraTicker.start(this);
+
         // Database
         new Database();
 
@@ -169,6 +179,8 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
 
     @Override
     public void onEnd() {
+        HookPacketEvents.stopGlowInterception();
+
         // Plugin shutdown logic
         for (Player player : Bukkit.getOnlinePlayers()) {
             CosmeticUser user = CosmeticUsers.getUser(player);

@@ -20,6 +20,7 @@ public class CosmeticSlot {
     public static final CosmeticSlot OFFHAND = register("OFFHAND");
     public static final CosmeticSlot BACKPACK = register("BACKPACK");
     public static final CosmeticSlot BALLOON = register("BALLOON");
+    public static final CosmeticSlot AURA = register("AURA");
 
     private final String name;
 
