@@ -25,7 +25,6 @@ equip-cosmetic: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Você equipou <cos
 unequip-cosmetic: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Você desequipou <cosmetic>."
 hide-cosmetic: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Cosméticos escondidos."
 show-cosmetic: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Cosméticos revelados."
-hidden-cosmetics: "<glyph:exclamation:3> <red>Seus cosméticos estão escondidos."
 
 emote-blocked: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não pode usar sua emote aqui."
 emote-none: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não tem nenhuma emote equipada."

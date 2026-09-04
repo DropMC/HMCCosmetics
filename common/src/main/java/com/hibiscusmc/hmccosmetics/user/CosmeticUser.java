@@ -56,6 +56,10 @@ import java.util.*;
 import java.util.logging.Level;
 
 public class CosmeticUser implements CosmeticHolder {
+
+    /** Bukkit metadata key the network's own vanish sets on a hidden player. See {@link #isVanished()}. */
+    private static final String VANISH_METADATA = "vanished";
+
     @Getter
     private final UUID uniqueId;
     private int taskId = -1;
@@ -181,6 +185,13 @@ public class CosmeticUser implements CosmeticHolder {
         }
 
         for (final HiddenReason reason : hiddenReasons) {
+            // VANISH is derived fresh on every tick, never restored. Bringing it back here would
+            // record the player as hidden without hiding anything: silentlyAddHideFlag only sets the
+            // flag, and the tick's hideCosmetics(VANISH) then returns early because the reason is
+            // already listed, so a cosmetic drawn while loading (an aura, most visibly) stays up for
+            // the whole session.
+            if (reason == HiddenReason.VANISH) continue;
+
             this.silentlyAddHideFlag(reason);
         }
     }
@@ -209,19 +220,26 @@ public class CosmeticUser implements CosmeticHolder {
     protected void tick() {
         MessagesUtil.sendDebugMessages("Tick[uuid=" + uniqueId + "]", Level.INFO);
 
-        if (Hooks.isInvisible(uniqueId)) {
+        if (Hooks.isInvisible(uniqueId) || isVanished()) {
             this.hideCosmetics(HiddenReason.VANISH);
         } else {
             this.showCosmetics(HiddenReason.VANISH);
         }
 
         this.updateCosmetic();
+    }
 
-        // Hiding by gamemode is automatic and permanent for as long as the player stays in it (typically
-        // spectator), so the reminder is pure noise every tick rather than something to act on.
-        if(isHidden() && !isHidden(HiddenReason.GAMEMODE) && !playerCosmetics.isEmpty()) {
-            MessagesUtil.sendActionBar(getPlayer(), "hidden-cosmetics");
-        }
+    /**
+     * Whether the server has marked this player as vanished.
+     *
+     * <p>{@link Hooks#isInvisible} only answers for the vanish plugins HibiscusCommons ships a hook
+     * for, and this network's vanish is its own. The {@code vanished} metadata key is the contract it
+     * publishes instead, the same one TAB reads to keep a vanished player out of the tab list, so
+     * reading it here needs no dependency on that plugin.</p>
+     */
+    private boolean isVanished() {
+        final Player player = getPlayer();
+        return player != null && player.hasMetadata(VANISH_METADATA);
     }
 
     public void destroy() {
@@ -652,8 +670,15 @@ public class CosmeticUser implements CosmeticHolder {
      * when the color is already the one applied) and its glowing bit through a metadata packet. Called
      * on equip, on unhide and on every user tick, the last of which is what reaches players who have
      * only just come into range.
+     *
+     * <p>Refuses to draw anything while the wearer is hidden. Several callers reach here from a state
+     * change rather than from an equip, and a backpack respawn is one of them: its pose is recomputed
+     * on sneak and sprint, so without this guard a vanished moderator got their aura back the moment
+     * they moved, and it stuck, because {@link #trackAuraGlow} had put the entity back into the
+     * packet interceptor that holds the glowing bit in.</p>
      */
     public void refreshAura() {
+        if (isHidden()) return;
         if (!(getCosmetic(CosmeticSlot.AURA) instanceof CosmeticAuraType aura)) return;
 
         Player player = getPlayer();
