@@ -17,6 +17,7 @@ import com.hibiscusmc.hmccosmetics.gui.special.impl.HMCColorDyeMenu;
 import com.hibiscusmc.hmccosmetics.gui.special.impl.InternalDyeMenu;
 import com.hibiscusmc.hmccosmetics.hooks.items.HookHMCCosmetics;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookBetterHud;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookGrim;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookPacketEvents;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookTAB;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookVulcan;
@@ -67,6 +68,7 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         new HookHMCCosmetics();
         new HookBetterHud();
         new HookVulcan();
+        new HookGrim();
         new HookTAB();
         new HookPacketEvents();
     }

@@ -79,6 +79,8 @@ public class Settings {
     private static final String PLAYER_SEARCH_IMPLEMENTATION = "player-search-implmentation";
     private static final String VULCAN_HOOK_PATH = "vulcan";
     private static final String VULCAN_IGNORE_CHECKS_IN_WARDROBE_PATH = "exempt-checks-in-wardrobe";
+    private static final String GRIM_HOOK_PATH = "grim";
+    private static final String GRIM_EXEMPT_CHECKS_IN_WARDROBE_PATH = "exempt-checks-in-wardrobe";
 
     @Getter
     private static String defaultMenu;
@@ -179,6 +181,8 @@ public class Settings {
     private static boolean wardrobeHideHud;
     @Getter
     private static boolean vulcanIgnoreViolationInWardrobe;
+    @Getter
+    private static boolean grimExemptChecksInWardrobe;
     @Getter
     private static boolean dyeMenuEnabled;
     @Getter
@@ -296,6 +300,11 @@ public class Settings {
 
         ConfigurationNode vulcanSettings = hookSettings.node(VULCAN_HOOK_PATH);
         vulcanIgnoreViolationInWardrobe = vulcanSettings.node(VULCAN_IGNORE_CHECKS_IN_WARDROBE_PATH).getBoolean(false);
+
+        // Defaults on, unlike the Vulcan one: without it the wardrobe menu does not open at all for
+        // a player the anticheat is watching, so an absent key must not leave that broken.
+        ConfigurationNode grimSettings = hookSettings.node(GRIM_HOOK_PATH);
+        grimExemptChecksInWardrobe = grimSettings.node(GRIM_EXEMPT_CHECKS_IN_WARDROBE_PATH).getBoolean(true);
 
         ConfigurationNode worldGuardSettings = hookSettings.node(HOOK_WORLDGUARD_PATH);
         worldGuardMoveCheck = worldGuardSettings.node(HOOK_WG_MOVE_CHECK_PATH).getBoolean(true);

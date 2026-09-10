@@ -160,6 +160,12 @@ hook-settings:
   vulcan:
     # Will ignore any violations in Vulcan if a player is within a wardrobe
     exempt-checks-in-wardrobe: false
+  grim:
+    # Suppresses the GrimAC checks a wardrobe session breaks, while the player is inside one.
+    # Leave this on: the wardrobe drops the swing packet from the stream once it has opened the
+    # menu, so GrimAC never sees that animation and PacketOrderB ("Did not swing for attack")
+    # cancels the click. With it off, the menu does not open at all for anyone without grim.exempt.
+    exempt-checks-in-wardrobe: true
 wardrobe:
   # how much yaw should change per tick, set to 0 for none
   rotation-speed: 3
