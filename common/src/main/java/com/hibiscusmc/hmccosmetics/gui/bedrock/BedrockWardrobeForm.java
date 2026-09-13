@@ -58,12 +58,13 @@ public final class BedrockWardrobeForm {
      * <p>
      * Two reasons, and the second is the one that matters: Bedrock draws section codes and nothing
      * else, and the nearest code to a rarity is often one of the dark ones, which on a Bedrock
-     * button is all but unreadable. These are the bright neighbours of the same hue, and common is
-     * white rather than any grey: a Bedrock button is grey, so every grey on it disappears.
+     * button is all but unreadable. These are the bright neighbours of the same hue, except common,
+     * which goes the other way: a Bedrock button is light grey, so the dark grey is what stands out
+     * on it and the mid grey is the one that disappears.
      * </p>
      */
     private static final Map<Rarity, String> RARITY_CODES = Map.of(
-            Rarity.COMMON, "§f",
+            Rarity.COMMON, "§8",
             Rarity.UNCOMMON, "§a",
             Rarity.RARE, "§9",
             Rarity.EPIC, "§d",
