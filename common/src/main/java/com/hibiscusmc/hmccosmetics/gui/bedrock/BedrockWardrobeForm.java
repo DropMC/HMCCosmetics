@@ -44,11 +44,26 @@ public final class BedrockWardrobeForm {
     private static final String BACK = "Voltar";
     private static final String LEAVE = "§cSair do provador";
 
-    /** Said on the button and again inside, because it is the whole reason the category looks broken. */
-    private static final String AURA_WARNING_KEY = "wardrobe-bedrock-aura";
-    private static final String AURA_WARNING_FALLBACK = "§eNão aparecem no Bedrock.";
     private static final String DYE_WARNING_KEY = "wardrobe-bedrock-dye";
     private static final String DYE_WARNING_FALLBACK = "§eCosméticos tingíveis ficam brancos no Bedrock.";
+
+    /**
+     * What a whole category cannot show on Bedrock, said on its button and again inside it, because
+     * it is the only thing that separates a limitation of that edition from a cosmetic being broken.
+     * <p>
+     * An aura is a glow that edition has no equivalent for. An offhand cosmetic is worse than it
+     * sounds: everything this server sends is correct, and the converted pack even carries an
+     * attachable bound to {@code off_hand}, but the Bedrock client still does not draw it for the
+     * player wearing it. Other players see it normally, which is what the warning says.
+     * </p>
+     */
+    private static final Map<String, SlotWarning> SLOT_WARNINGS = Map.of(
+            "AURA", new SlotWarning("wardrobe-bedrock-aura", "§eNão aparecem no Bedrock."),
+            "OFFHAND", new SlotWarning("wardrobe-bedrock-offhand", "§eSó aparece para outros jogadores."));
+
+    /** A warning's message key, with the text to fall back on when the live file has no such key. */
+    private record SlotWarning(@NotNull String key, @NotNull String fallback) {
+    }
 
     private static final String EQUIPPED_NOTE = "  §aEquipado";
 
@@ -156,7 +171,10 @@ public final class BedrockWardrobeForm {
     private static String categoryLabel(@NotNull Player player, @NotNull CosmeticSlot slot, @Nullable Cosmetic equipped) {
         StringBuilder label = new StringBuilder(slotName(slot));
         if (equipped != null) label.append('\n').append(coloured(equipped));
-        if (CosmeticSlot.AURA.equals(slot)) label.append('\n').append(auraWarning(player));
+
+        String warning = slotWarning(player, slot);
+        if (warning != null) label.append('\n').append(warning);
+
         return label.toString();
     }
 
@@ -179,16 +197,21 @@ public final class BedrockWardrobeForm {
     @NotNull
     private static String slotContent(@NotNull Player player, @NotNull CosmeticSlot slot, @NotNull List<Cosmetic> cosmetics) {
         if (cosmetics.isEmpty()) return NOTHING_AVAILABLE;
-        if (CosmeticSlot.AURA.equals(slot)) return auraWarning(player);
+
+        String warning = slotWarning(player, slot);
+        if (warning != null) return warning;
+
         if (cosmetics.stream().anyMatch(Cosmetic::isDyeable)) {
             return PICK_COSMETIC + "\n" + BedrockText.fromKey(player, DYE_WARNING_KEY, DYE_WARNING_FALLBACK);
         }
         return PICK_COSMETIC;
     }
 
-    @NotNull
-    private static String auraWarning(@NotNull Player player) {
-        return BedrockText.fromKey(player, AURA_WARNING_KEY, AURA_WARNING_FALLBACK);
+    /** What this category cannot show on Bedrock, or null when it shows normally. */
+    @Nullable
+    private static String slotWarning(@NotNull Player player, @NotNull CosmeticSlot slot) {
+        SlotWarning warning = SLOT_WARNINGS.get(slot.getName());
+        return warning == null ? null : BedrockText.fromKey(player, warning.key(), warning.fallback());
     }
 
     /**
