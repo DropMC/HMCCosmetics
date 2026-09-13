@@ -9,6 +9,8 @@ import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
 import com.hibiscusmc.hmccosmetics.gui.Menu;
 import com.hibiscusmc.hmccosmetics.gui.Menus;
+import com.hibiscusmc.hmccosmetics.gui.bedrock.BedrockWardrobeForm;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.HMCCInventoryUtils;
 import com.hibiscusmc.hmccosmetics.util.HMCCServerUtils;
@@ -31,12 +33,20 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 public class UserWardrobeManager {
+
+    /**
+     * How far above its position Geyser puts the camera of the entity a Bedrock player is watching
+     * from: the interaction entity's default height of 1 times the 0.85 eye ratio Geyser applies to
+     * every entity. See {@link #bedrockCameraAnchor()}.
+     */
+    private static final double BEDROCK_ANCHOR_EYE_HEIGHT = 0.85;
 
     @Getter
     private final int NPC_ID;
@@ -78,6 +88,25 @@ public class UserWardrobeManager {
     @Getter
     @Setter
     private int lastOpenPage = 1;
+    /**
+     * Whether this session belongs to a Bedrock player, decided once on entry so that every step of
+     * the session agrees on it even if the hook stops answering halfway through.
+     * <p>
+     * A Bedrock player gets the same wardrobe as everyone else, pinned camera included, but two of
+     * the packets that build it have to be different because of how Geyser reads them. Both are
+     * marked at the point they are sent; in short, the camera cannot be anchored to an armor stand
+     * and the client cannot be told it is in spectator.
+     * </p>
+     */
+    @Getter
+    private final boolean bedrock;
+    /** Flight the player walked in with, recorded in {@link #start()} and given back in {@link #end()}. */
+    private boolean previousAllowFlight;
+    private boolean previousFlying;
+    /** Whether jump was already down on the previous input, so holding it does not reopen the menu. */
+    @Getter
+    @Setter
+    private boolean jumpHeld;
 
     private NMSPacketBuilder packetBuilder = NMSHandlers.getHandler().getPacketBuilder();
     private NMSPacketSender packetSender = NMSHandlers.getHandler().getPacketSender();
@@ -88,6 +117,7 @@ public class UserWardrobeManager {
         ARMORSTAND_ID = me.lojosho.hibiscuscommons.util.ServerUtils.getNextEntityId(world);
         WARDROBE_UUID = UUID.randomUUID();
         this.user = user;
+        this.bedrock = HookFloodgate.isBedrockPlayer(user.getPlayer());
 
         this.wardrobe = wardrobe;
         this.wardrobeLocation = wardrobe.getLocation();
@@ -122,6 +152,10 @@ public class UserWardrobeManager {
         Player player = user.getPlayer();
 
         this.originalGamemode = player.getGameMode();
+        // Read before the line below starts handing out flight, or what gets restored on the way out
+        // is the wardrobe's own doing rather than what the player walked in with.
+        this.previousAllowFlight = player.getAllowFlight();
+        this.previousFlying = player.isFlying();
         if (WardrobeSettings.isReturnLastLocation()) {
             this.exitLocation = player.getLocation().clone();
         }
@@ -140,16 +174,34 @@ public class UserWardrobeManager {
 
             List<PacketWrapper> viewerPackets = new ArrayList<>();
 
-            // Armorstand
-            viewerPackets.add(packetBuilder.buildEntitySpawnPacket(ARMORSTAND_ID, UUID.randomUUID(), EntityType.ARMOR_STAND, viewingLocation));
-            viewerPackets.add(packetBuilder.buildEntityMetadataPacket(ARMORSTAND_ID, HMCCPacketManager.getInvisibleArmorStandData()));
-            viewerPackets.add(packetBuilder.buildEntityTeleportPacket(ARMORSTAND_ID, viewingLocation.getX(), viewingLocation.getY(), viewingLocation.getZ(), viewingLocation.getYaw(), viewingLocation.getPitch(), false));
-            viewerPackets.add(packetBuilder.buildEntityRotateHeadPacket(ARMORSTAND_ID, viewingLocation));
+            // Camera anchor
+            if (bedrock) {
+                // An armor stand cannot hold a Bedrock camera: Geyser rebuilds one from its own yaw
+                // (ArmorStandEntity#moveAbsoluteRaw passes yaw where pitch belongs), so the camera
+                // ends up pitched to wherever the wardrobe happens to face, which is the floor for
+                // any yaw past 90. An interaction entity is a plain entity to Geyser and keeps the
+                // pitch it is given. It needs no metadata: Geyser spawns it invisible already.
+                final Location anchor = bedrockCameraAnchor();
+                viewerPackets.add(packetBuilder.buildEntitySpawnPacket(ARMORSTAND_ID, UUID.randomUUID(), EntityType.INTERACTION, anchor));
+                viewerPackets.add(packetBuilder.buildEntityTeleportPacket(ARMORSTAND_ID, anchor.getX(), anchor.getY(), anchor.getZ(), anchor.getYaw(), anchor.getPitch(), false));
+                viewerPackets.add(packetBuilder.buildEntityRotateHeadPacket(ARMORSTAND_ID, anchor));
+            } else {
+                viewerPackets.add(packetBuilder.buildEntitySpawnPacket(ARMORSTAND_ID, UUID.randomUUID(), EntityType.ARMOR_STAND, viewingLocation));
+                viewerPackets.add(packetBuilder.buildEntityMetadataPacket(ARMORSTAND_ID, HMCCPacketManager.getInvisibleArmorStandData()));
+                viewerPackets.add(packetBuilder.buildEntityTeleportPacket(ARMORSTAND_ID, viewingLocation.getX(), viewingLocation.getY(), viewingLocation.getZ(), viewingLocation.getYaw(), viewingLocation.getPitch(), false));
+                viewerPackets.add(packetBuilder.buildEntityRotateHeadPacket(ARMORSTAND_ID, viewingLocation));
+            }
 
             // Player
             player.teleport(viewingLocation, PlayerTeleportEvent.TeleportCause.PLUGIN);
             player.setInvisible(true);
-            viewerPackets.add(packetBuilder.buildPlayerGamemodeChangePacket(GameMode.SPECTATOR));
+            // Bedrock is told adventure instead of spectator. Geyser refuses to forward the swing of
+            // any session it believes is in spectator (BedrockAnimateTranslator), and that swing is
+            // the punch that opens the menu, so spectator would leave the player staring at a
+            // mannequin with no way in. Nothing else is lost by it: the camera below is what holds
+            // the player still, and an adventure client sends no block breaks while the server still
+            // has them in survival.
+            viewerPackets.add(packetBuilder.buildPlayerGamemodeChangePacket(bedrock ? GameMode.ADVENTURE : GameMode.SPECTATOR));
             viewerPackets.add(packetBuilder.buildEntityCameraPacket(ARMORSTAND_ID));
 
             // NPC
@@ -186,6 +238,8 @@ public class UserWardrobeManager {
 
             packetSender.sendBundle(viewerPackets, viewer);
 
+            if (bedrock) holdBedrockPlayerInPlace(player);
+
             if (user.hasCosmeticInSlot(CosmeticSlot.BALLOON)) {
                 if (user.getBalloonManager() == null) user.respawnBalloon();
                 if (user.isBalloonSpawned()) {
@@ -211,7 +265,7 @@ public class UserWardrobeManager {
                 player.showBossBar(bossBar);
             }
 
-            if (WardrobeSettings.isEnterOpenMenu()) {
+            if (WardrobeSettings.isEnterOpenMenu() && !bedrock) {
                 Menu menu = Menus.getDefaultMenu();
                 if (menu != null) menu.openMenu(user);
             }
@@ -219,6 +273,9 @@ public class UserWardrobeManager {
             this.active = true;
             update();
             setWardrobeStatus(WardrobeStatus.RUNNING);
+            // Bedrock is always handed the menu on arrival, whatever enter-open-menu says: the
+            // control that reopens it is a jump, which is not a control anyone would guess at.
+            if (bedrock) openWardrobeMenu();
             // The aura is drawn on whichever entity the wearer is looking at, which just became the
             // mannequin. Without this the preview only appears on the next user tick.
             user.refreshAura();
@@ -240,6 +297,79 @@ public class UserWardrobeManager {
 
     }
 
+    /**
+     * Puts a Bedrock player's camera back on the anchor, in first person.
+     * <p>
+     * Geyser treats jump as its own control while a camera is pinned and cycles the view between
+     * first and third person with it ({@code InputCache#processInputs}). Jump is also the only
+     * button left that can open the menu, so every press has to undo that. Re-sending the camera
+     * packet is what does it: the translator behind it starts the pin over, and it starts in first
+     * person.
+     * </p>
+     */
+    public void repinBedrockCamera() {
+        Player player = user.getPlayer();
+        if (player == null) return;
+
+        packetBuilder.buildEntityCameraPacket(ARMORSTAND_ID).sendPacket(Collections.singletonList(player));
+    }
+
+    /**
+     * Opens the wardrobe's menu, whichever kind this player can be shown.
+     * <p>
+     * Bedrock gets {@link BedrockWardrobeForm}. Its client will not open a container while the
+     * camera is pinned to the mannequin, and the pinned camera is the wardrobe itself, so the chest
+     * menu cannot be relied on there at all: it has been seen to open and then stop opening again
+     * with nothing on this side having changed.
+     * </p>
+     */
+    public void openWardrobeMenu() {
+        if (bedrock) {
+            BedrockWardrobeForm.open(user);
+            return;
+        }
+
+        Menu menu = lastOpenMenu != null ? lastOpenMenu : Menus.getDefaultMenu();
+        if (menu != null) menu.openMenu(user);
+    }
+
+    /**
+     * Where a Bedrock camera anchor has to sit to end up where the Java one does.
+     * <p>
+     * Geyser puts the camera at the anchor's eye, which it takes as 0.85 of the entity's height. The
+     * Java anchor is a marker armor stand, and a marker's box is zero, so that camera sits exactly on
+     * the viewing location. An interaction entity keeps Geyser's default height of 1 until the server
+     * says otherwise, so its eye is 0.85 above it and the anchor drops by that much to compensate.
+     * </p>
+     * The rotation is the viewing location's own, which is the whole reason for the swap.
+     */
+    @NotNull
+    private Location bedrockCameraAnchor() {
+        return viewingLocation.clone().subtract(0, BEDROCK_ANCHOR_EYE_HEIGHT, 0);
+    }
+
+    /**
+     * Keeps the Bedrock client from falling on its own while it is parked in the wardrobe.
+     * <p>
+     * Geyser stops forwarding movement the moment the camera is pinned, so the server never sees the
+     * player move either way. The client still runs gravity locally though, and an adventure client
+     * left falling for a whole wardrobe session is a long way down from where it is supposed to be
+     * when the camera is handed back. Flight granted by the server also keeps the anticheat happy.
+     */
+    private void holdBedrockPlayerInPlace(@NotNull Player player) {
+        player.setAllowFlight(true);
+        player.setFlying(true);
+    }
+
+    /**
+     * Gives back what {@link #holdBedrockPlayerInPlace} borrowed. Flight has to go before the exit
+     * teleport, or a player who could not fly to begin with lands back outside still flying.
+     */
+    private void releaseBedrockPlayer(@NotNull Player player) {
+        player.setFlying(previousFlying);
+        player.setAllowFlight(previousAllowFlight);
+    }
+
     public void end() {
         setWardrobeStatus(WardrobeStatus.STOPPING);
         Player player = user.getPlayer();
@@ -249,7 +379,8 @@ public class UserWardrobeManager {
         outsideViewers.remove(player);
 
         if (player == null) return;
-        if (!Bukkit.getServer().getAllowFlight()) player.setAllowFlight(false);
+        if (bedrock) releaseBedrockPlayer(player);
+        else if (!Bukkit.getServer().getAllowFlight()) player.setAllowFlight(false);
 
         Runnable run = () -> {
             this.active = false;
@@ -342,7 +473,7 @@ public class UserWardrobeManager {
                 // Neither control is discoverable, so the hint stays up for the whole session instead of
                 // flashing once on entry. Resent every run because the action bar fades on its own, and so
                 // it comes back by itself once a menu stops covering the HUD.
-                MessagesUtil.sendActionBar(player, "wardrobe-controls");
+                MessagesUtil.sendActionBar(player, bedrock ? "wardrobe-controls-bedrock" : "wardrobe-controls");
 
                 List<Player> viewer = Collections.singletonList(player);
                 List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);

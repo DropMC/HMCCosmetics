@@ -10,6 +10,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBackpackType;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
+import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
 import com.hibiscusmc.hmccosmetics.util.HMCCInventoryUtils;
 import com.hibiscusmc.hmccosmetics.util.HMCCServerUtils;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
@@ -28,6 +29,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -79,6 +81,41 @@ public class PlayerGameListener implements Listener {
         if (!user.isInWardrobe()) return;
 
         user.leaveWardrobe(false);
+    }
+
+    /**
+     * Jump opens the wardrobe menu for a Bedrock player, in place of the punch everyone else uses.
+     * <p>
+     * The punch cannot reach the server there. What pins the camera on Bedrock is a camera
+     * instruction, and a pinned camera has no crosshair and no interaction, so the client never
+     * produces a swing to forward, nor a click on anything placed in front of the player. Geyser
+     * does read the raw state of the movement keys precisely so they survive a locked camera, which
+     * leaves jump and sneak as the only two controls that still arrive. Sneak is the way out, so
+     * jump is the way in.
+     * </p>
+     * Only the press counts, never the ticks the button stays down for, and never while the menu is
+     * already open.
+     */
+    @EventHandler(priority = EventPriority.LOW)
+    public void onPlayerInput(PlayerInputEvent event) {
+        CosmeticUser user = CosmeticUsers.getUser(event.getPlayer().getUniqueId());
+        if (user == null || !user.isInWardrobe()) return;
+
+        UserWardrobeManager wardrobe = user.getWardrobeManager();
+        if (!wardrobe.isBedrock() || wardrobe.getWardrobeStatus() != UserWardrobeManager.WardrobeStatus.RUNNING) return;
+
+        if (!event.getInput().isJump()) {
+            wardrobe.setJumpHeld(false);
+            return;
+        }
+        if (wardrobe.isJumpHeld()) return;
+        wardrobe.setJumpHeld(true);
+
+        // Geyser moved the camera off first person on its way here, whatever this press goes on to do.
+        wardrobe.repinBedrockCamera();
+
+        if (event.getPlayer().getOpenInventory().getType() != InventoryType.CRAFTING) return;
+        wardrobe.openWardrobeMenu();
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)

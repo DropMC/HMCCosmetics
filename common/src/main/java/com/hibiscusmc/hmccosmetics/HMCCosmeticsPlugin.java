@@ -17,6 +17,7 @@ import com.hibiscusmc.hmccosmetics.gui.special.impl.HMCColorDyeMenu;
 import com.hibiscusmc.hmccosmetics.gui.special.impl.InternalDyeMenu;
 import com.hibiscusmc.hmccosmetics.hooks.items.HookHMCCosmetics;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookBetterHud;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookGrim;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookPacketEvents;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookTAB;
@@ -31,6 +32,7 @@ import com.hibiscusmc.hmccosmetics.user.AuraTicker;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.util.search.PlayerSearchManager;
+import com.hibiscusmc.hmccosmetics.util.BedrockIcons;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.TranslationUtil;
 import lombok.Getter;
@@ -69,6 +71,7 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         new HookBetterHud();
         new HookVulcan();
         new HookGrim();
+        new HookFloodgate();
         new HookTAB();
         new HookPacketEvents();
     }
@@ -128,6 +131,10 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         } else {
             getLogger().severe("Unable to register commands! (Is another plugin interfering with HMCCosmetics commands?)");
         }
+
+        // The icon index is about a megabyte of JSON off Scaffolding's pack, and the first Bedrock
+        // player to open the wardrobe would otherwise pay for reading it while the menu opens.
+        BedrockIcons.warmUp(this);
 
         // Listener
         getServer().getPluginManager().registerEvents(new PlayerConnectionListener(), this);

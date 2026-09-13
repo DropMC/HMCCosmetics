@@ -213,9 +213,9 @@ public class CosmeticPacketInterface implements PacketInterface {
         CosmeticUser user = CosmeticUsers.getUser(player);
         if (user == null || !user.isInWardrobe() || !user.getWardrobeManager().getWardrobeStatus().equals(UserWardrobeManager.WardrobeStatus.RUNNING)) return PacketAction.NOTHING;
 
-        Menu menu = user.getWardrobeManager().getLastOpenMenu();
-        if (menu == null) return PacketAction.NOTHING;
-        menu.openMenu(user);
+        // Through the manager rather than straight to the menu, so a Bedrock player who does land a
+        // punch gets the form they can actually be shown instead of a chest that will not open.
+        user.getWardrobeManager().openWardrobeMenu();
         return PacketAction.CANCELLED;
     }
 

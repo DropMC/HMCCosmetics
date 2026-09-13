@@ -185,11 +185,25 @@ public abstract class Cosmetic {
     }
 
     /** Rarity, limited and dyeable glyphs, in that order, {@code <shift:1>} apart and no other spacing. */
-    private @Nullable String buildBadgeLine() {
+    public @Nullable String buildBadgeLine() {
+        return buildBadgeLine(true);
+    }
+
+    /**
+     * The badge line, optionally without the dyeable glyph.
+     * <p>
+     * Public so the Bedrock form can draw the same badges from this definition instead of from a
+     * second copy of the glyph ids, which would drift away from this one.
+     * </p>
+     *
+     * @param includeDyeable false for Bedrock, where nothing can be dyed at all, so the badge would
+     *                       only advertise something that edition has no way to use
+     */
+    public @Nullable String buildBadgeLine(boolean includeDyeable) {
         List<String> glyphIds = new ArrayList<>();
         if (rarity != null) glyphIds.add(rarity.glyphId());
         if (limited) glyphIds.add(LIMITED_GLYPH_ID);
-        if (dyeable) glyphIds.add(DYEABLE_GLYPH_ID);
+        if (dyeable && includeDyeable) glyphIds.add(DYEABLE_GLYPH_ID);
         if (glyphIds.isEmpty()) return null;
 
         StringBuilder line = new StringBuilder();

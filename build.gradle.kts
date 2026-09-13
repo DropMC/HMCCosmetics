@@ -69,6 +69,9 @@ allprojects {
 
         // PacketEvents
         maven("https://repo.codemc.io/repository/maven-releases/")
+
+        // Floodgate
+        maven("https://repo.opencollab.dev/main/")
     }
 
     dependencies {
@@ -101,6 +104,9 @@ allprojects {
         // version survival-root builds against; the server runs a newer one and the team wrapper's
         // signatures are unchanged between them.
         compileOnly("com.github.retrooper:packetevents-spigot:2.9.5")
+        // Tells the wardrobe which players are on Bedrock (see HookFloodgate). Matches the Floodgate
+        // the server runs; only isFloodgatePlayer is used, and that has been on the API since 2.0.
+        compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
 
         implementation("dev.triumphteam:triumph-gui:3.2.0-SNAPSHOT") {
             exclude("net.kyori") // Already have adventure API
@@ -182,7 +188,7 @@ bukkit {
     apiVersion = "1.20"
     authors = listOf("LoJoSho")
     depend = listOf("HibiscusCommons")
-    softDepend = listOf("Nexo", "BetterHud", "ModelEngine", "Oraxen", "ItemsAdder", "Geary", "HMCColor", "WorldGuard", "MythicMobs", "PlaceholderAPI", "SuperVanish", "PremiumVanish", "LibsDisguises", "Denizen", "MMOItems", "Eco", "TAB", "packetevents")
+    softDepend = listOf("Nexo", "BetterHud", "ModelEngine", "Oraxen", "ItemsAdder", "Geary", "HMCColor", "WorldGuard", "MythicMobs", "PlaceholderAPI", "SuperVanish", "PremiumVanish", "LibsDisguises", "Denizen", "MMOItems", "Eco", "TAB", "packetevents", "floodgate")
     version = "${project.version}"
 
     commands {
