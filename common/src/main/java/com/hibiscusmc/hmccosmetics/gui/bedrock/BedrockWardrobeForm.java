@@ -51,15 +51,11 @@ public final class BedrockWardrobeForm {
      * What a whole category cannot show on Bedrock, said on its button and again inside it, because
      * it is the only thing that separates a limitation of that edition from a cosmetic being broken.
      * <p>
-     * An aura is a glow that edition has no equivalent for. An offhand cosmetic is worse than it
-     * sounds: everything this server sends is correct, and the converted pack even carries an
-     * attachable bound to {@code off_hand}, but the Bedrock client still does not draw it for the
-     * player wearing it. Other players see it normally, which is what the warning says.
+     * An aura is a glow that edition has no equivalent for.
      * </p>
      */
     private static final Map<String, SlotWarning> SLOT_WARNINGS = Map.of(
-            "AURA", new SlotWarning("wardrobe-bedrock-aura", "§eNão aparecem no Bedrock."),
-            "OFFHAND", new SlotWarning("wardrobe-bedrock-offhand", "§eSó aparece para outros jogadores."));
+            "AURA", new SlotWarning("wardrobe-bedrock-aura", "§eNão aparecem no Bedrock."));
 
     /** A warning's message key, with the text to fall back on when the live file has no such key. */
     private record SlotWarning(@NotNull String key, @NotNull String fallback) {

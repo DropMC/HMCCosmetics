@@ -48,6 +48,9 @@ public class UserWardrobeManager {
      */
     private static final double BEDROCK_ANCHOR_EYE_HEIGHT = 0.85;
 
+    /** Ticks to wait before drawing the cosmetics over a Bedrock player's hands again on the way out. */
+    private static final int BEDROCK_RESYNC_DELAY = 5;
+
     @Getter
     private final int NPC_ID;
     @Getter
@@ -452,6 +455,15 @@ public class UserWardrobeManager {
             player.sendActionBar(Component.empty());
 
             user.updateCosmetic();
+
+            // A Bedrock client rebuilds the player's own hands from its own inventory once the
+            // wardrobe's screens are gone, which drops what the line above just drew over them. One
+            // more pass, late enough to land after that, is what makes a cosmetic picked in here
+            // show up without the player having to go and click something in their inventory.
+            if (bedrock) {
+                Bukkit.getScheduler().runTaskLater(
+                        HMCCosmeticsPlugin.getInstance(), () -> user.updateCosmetic(), BEDROCK_RESYNC_DELAY);
+            }
         };
         run.run();
     }

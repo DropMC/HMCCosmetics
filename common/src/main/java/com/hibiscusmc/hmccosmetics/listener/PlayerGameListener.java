@@ -8,6 +8,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBackpackType;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
@@ -29,6 +30,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
@@ -45,6 +47,13 @@ import java.util.Map;
 import java.util.Set;
 
 public class PlayerGameListener implements Listener {
+
+    /**
+     * Ticks to wait before putting a Bedrock player's cosmetics back, long enough to land after the
+     * client has finished rebuilding its own inventory.
+     */
+    private static final int BEDROCK_RESYNC_DELAY = 2;
+
     @EventHandler(priority = EventPriority.LOW)
     public void onPlayerClick(@NotNull InventoryClickEvent event) {
         // || !event.getClickedInventory().getType().equals(InventoryType.PLAYER)
@@ -70,6 +79,36 @@ public class PlayerGameListener implements Listener {
             user.updateCosmetic(cosmeticSlot);
         }, 1);
         MessagesUtil.sendDebugMessages("Event fired, updated cosmetic " + cosmeticSlot);
+    }
+
+    /**
+     * Puts a Bedrock player's cosmetics back after they touch their inventory.
+     * <p>
+     * A cosmetic is worn by packet, over a slot the server still has empty, and a Bedrock client
+     * rebuilds the player's own hands from its own inventory whenever it touches one. That wipes
+     * whatever was drawn over the hands: clicking the offhand slot leaves it empty for good, and a
+     * cosmetic equipped while a screen is open never shows at all. The click above only covers a
+     * click whose item is armor, which is neither of those cases.
+     * </p>
+     * Java has no such resync, so this is left to Bedrock rather than sending everyone the extra
+     * equipment packet.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onBedrockInventoryClick(@NotNull InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player) restoreBedrockCosmetics(player);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onBedrockInventoryClose(@NotNull InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof Player player) restoreBedrockCosmetics(player);
+    }
+
+    private void restoreBedrockCosmetics(@NotNull Player player) {
+        CosmeticUser user = CosmeticUsers.getUser(player.getUniqueId());
+        if (user == null || user.isInWardrobe()) return;
+        if (!HookFloodgate.isBedrockPlayer(player)) return;
+
+        Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> user.updateCosmetic(), BEDROCK_RESYNC_DELAY);
     }
 
     @EventHandler(priority = EventPriority.LOW)

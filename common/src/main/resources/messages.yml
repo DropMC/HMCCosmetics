@@ -17,7 +17,6 @@ wardrobe-controls: "<glyph:mouse:1> <white>para abrir o menu <dark_gray>| <glyph
 wardrobe-controls-bedrock: "<white>Bata ou pule <gray>para abrir o menu <dark_gray>| <white>Agache <gray>para sair"
 # Shown inside the Bedrock wardrobe form, on what that edition cannot draw at all.
 wardrobe-bedrock-aura: "<glyph:exclamation:2> <yellow>Não aparecem no Bedrock."
-wardrobe-bedrock-offhand: "<glyph:exclamation:2> <yellow>Só aparece para outros jogadores."
 wardrobe-bedrock-dye: "<glyph:exclamation:2> <yellow>Cosméticos tingíveis ficam brancos no Bedrock."
 not-near-wardrobe: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não está perto do provador."
 set-wardrobe-location: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Nova localização do provador definida."
