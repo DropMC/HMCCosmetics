@@ -27,6 +27,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.*;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -50,6 +51,18 @@ public class UserWardrobeManager {
 
     /** Ticks to wait before drawing the cosmetics over a Bedrock player's hands again on the way out. */
     private static final int BEDROCK_RESYNC_DELAY = 5;
+
+    /**
+     * Key of the reach the wardrobe lends the player, so the modifier can be told apart from whatever
+     * else is on the attribute and taken back off on the way out. See {@link #extendReachToMannequin}.
+     */
+    private static final NamespacedKey WARDROBE_REACH_KEY = new NamespacedKey("hmccosmetics", "wardrobe_reach");
+
+    /**
+     * Blocks of slack on top of the camera to mannequin distance, so the click lands anywhere on the
+     * hitbox rather than only on the one point the two locations measure between.
+     */
+    private static final double WARDROBE_REACH_MARGIN = 2.0;
 
     @Getter
     private final int NPC_ID;
@@ -198,6 +211,7 @@ public class UserWardrobeManager {
             // Player
             player.teleport(viewingLocation, PlayerTeleportEvent.TeleportCause.PLUGIN);
             player.setInvisible(true);
+            if (!bedrock) extendReachToMannequin(player);
             // Bedrock is told adventure instead of spectator. Geyser refuses to forward the swing of
             // any session it believes is in spectator (BedrockAnimateTranslator), and that swing is
             // the punch that opens the menu, so spectator would leave the player staring at a
@@ -373,6 +387,54 @@ public class UserWardrobeManager {
         player.setAllowFlight(previousAllowFlight);
     }
 
+    /**
+     * Puts the mannequin inside the client's entity reach, which is what makes the punch open the
+     * menu at all on a current client.
+     * <p>
+     * Since 1.21.11 a client that believes it is in spectator sends no swing: {@code Minecraft#startAttack}
+     * grew an {@code isSpectator} guard around the one it used to send unconditionally, and 26.1 moved
+     * the whole spectator case to the top of the method and returns from there. The animation packet
+     * {@code CosmeticPacketInterface#readPlayerArm} waits for simply never arrives any more, and the
+     * wardrobe is a client side spectator by design. What a spectator does still send is the click on
+     * an entity, which reaches {@code CosmeticPacketInterface#readEntityHandle} and opens the menu
+     * there, but the client only produces it for an entity within {@code entity_interaction_range}.
+     * That attribute is 3 blocks and a wardrobe stands the mannequin further off than that, so without
+     * this there is nothing under the crosshair to click and the left button does nothing at all.
+     * </p>
+     * Bedrock is left out on purpose: a pinned Geyser camera has no crosshair and no interaction, so
+     * reach changes nothing there and the jump in {@code PlayerGameListener#onPlayerInput} is its way in.
+     */
+    private void extendReachToMannequin(@NotNull Player player) {
+        AttributeInstance reach = player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE);
+        if (reach == null) return;
+
+        clearWardrobeReach(player);
+        // Not Location#distance: a wardrobe whose two points ended up in different worlds throws there,
+        // and that would take the whole entry down over an attribute.
+        double needed = viewingLocation.toVector().distance(npcLocation.toVector())
+                + WARDROBE_REACH_MARGIN - reach.getValue();
+        if (needed <= 0) return;
+
+        reach.addModifier(new AttributeModifier(WARDROBE_REACH_KEY, needed, AttributeModifier.Operation.ADD_NUMBER));
+    }
+
+    /**
+     * Takes the wardrobe's reach back off, matching on the key so nothing else on the attribute is
+     * touched.
+     * <p>
+     * Also called on join, because an attribute modifier is saved with the player: a server that goes
+     * down with someone still inside a wardrobe would otherwise hand them the extra reach for good.
+     * </p>
+     */
+    public static void clearWardrobeReach(@NotNull Player player) {
+        AttributeInstance reach = player.getAttribute(Attribute.ENTITY_INTERACTION_RANGE);
+        if (reach == null) return;
+
+        for (AttributeModifier modifier : List.copyOf(reach.getModifiers())) {
+            if (WARDROBE_REACH_KEY.equals(modifier.getKey())) reach.removeModifier(modifier);
+        }
+    }
+
     public void end() {
         setWardrobeStatus(WardrobeStatus.STOPPING);
         Player player = user.getPlayer();
@@ -382,8 +444,12 @@ public class UserWardrobeManager {
         outsideViewers.remove(player);
 
         if (player == null) return;
-        if (bedrock) releaseBedrockPlayer(player);
-        else if (!Bukkit.getServer().getAllowFlight()) player.setAllowFlight(false);
+        if (bedrock) {
+            releaseBedrockPlayer(player);
+        } else {
+            clearWardrobeReach(player);
+            if (!Bukkit.getServer().getAllowFlight()) player.setAllowFlight(false);
+        }
 
         Runnable run = () -> {
             this.active = false;

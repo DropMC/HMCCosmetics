@@ -223,6 +223,14 @@ public class CosmeticPacketInterface implements PacketInterface {
     public @NotNull PacketAction readEntityHandle(@NotNull Player player, @NotNull PlayerInteractWrapper wrapper) {
         CosmeticUser user = CosmeticUsers.getUser(player);
         if (user == null || !user.isInWardrobe()) return PacketAction.NOTHING;
-        else return PacketAction.CANCELLED;
+
+        // The click on the mannequin, which is what a client from 1.21.11 on sends in place of the
+        // swing it stopped producing in spectator. It arrives as a spectate on 26.1 and as an attack
+        // before that, and either way the entity is one of the wardrobe's own, so both open the menu.
+        // See UserWardrobeManager#extendReachToMannequin for why the click can reach it at all.
+        UserWardrobeManager wardrobe = user.getWardrobeManager();
+        if (wardrobe.getWardrobeStatus().equals(UserWardrobeManager.WardrobeStatus.RUNNING)) wardrobe.openWardrobeMenu();
+
+        return PacketAction.CANCELLED;
     }
 }
