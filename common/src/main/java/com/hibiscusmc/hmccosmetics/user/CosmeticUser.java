@@ -72,6 +72,8 @@ public class CosmeticUser implements CosmeticHolder {
     // Cosmetic Settings/Toggles
     private final ArrayList<HiddenReason> hiddenReason = new ArrayList<>();
     private final HashMap<CosmeticSlot, Color> colors = new HashMap<>();
+    /** What the worn outfit covered up, or null while none is worn. See {@link #wearOutfit(Collection)}. */
+    private @Nullable Map<CosmeticSlot, SavedCosmetic> coveredCosmetics;
 
     /** Last entity flag byte sent for the aura, or null when none is applied. See {@link #refreshAuraOnStateChange()}. */
     private Byte lastAuraFlags;
@@ -220,13 +222,22 @@ public class CosmeticUser implements CosmeticHolder {
     protected void tick() {
         MessagesUtil.sendDebugMessages("Tick[uuid=" + uniqueId + "]", Level.INFO);
 
-        if (Hooks.isInvisible(uniqueId) || isVanished()) {
+        this.refreshVanish();
+        this.updateCosmetic();
+    }
+
+    /**
+     * Hides the cosmetics of a vanished player. An outfit stays up through the network's own vanish:
+     * it is what marks the wearer to whoever can still see them, and the entities it spawns only
+     * reach those players (see {@code UserEntity#refreshViewers}).
+     */
+    private void refreshVanish() {
+        // Hooks.isInvisible reads the same "vanished" metadata, so the outfit has to exempt both.
+        if (!isWearingOutfit() && (Hooks.isInvisible(uniqueId) || isVanished())) {
             this.hideCosmetics(HiddenReason.VANISH);
         } else {
             this.showCosmetics(HiddenReason.VANISH);
         }
-
-        this.updateCosmetic();
     }
 
     /**
@@ -344,6 +355,61 @@ public class CosmeticUser implements CosmeticHolder {
 
     public @NotNull Set<CosmeticSlot> getSlotsWithCosmetics() {
         return Set.copyOf(playerCosmetics.keySet());
+    }
+
+    /**
+     * Swaps everything the player wears for {@code outfit} until {@link #takeOffOutfit()}. The outfit
+     * is never saved: while it is on, the database keeps receiving what it covered, so a player who
+     * disconnects in it logs back in with their own cosmetics. Wearing a second outfit replaces the
+     * first and still gives back the original set.
+     */
+    public void wearOutfit(@NotNull Collection<Cosmetic> outfit) {
+        if (coveredCosmetics == null) {
+            coveredCosmetics = snapshotCosmetics();
+        }
+        removeAllCosmetics();
+        refreshVanish();
+        for (Cosmetic cosmetic : outfit) {
+            addCosmetic(cosmetic);
+        }
+    }
+
+    /** Puts back what {@link #wearOutfit(Collection)} covered up. Does nothing without an outfit on. */
+    public void takeOffOutfit() {
+        if (coveredCosmetics == null) return;
+
+        Map<CosmeticSlot, SavedCosmetic> covered = coveredCosmetics;
+        coveredCosmetics = null;
+        removeAllCosmetics();
+        refreshVanish();
+        for (SavedCosmetic saved : covered.values()) {
+            addCosmetic(saved.cosmetic(), saved.color());
+        }
+    }
+
+    public boolean isWearingOutfit() {
+        return coveredCosmetics != null;
+    }
+
+    /** What the database stores for this player: their own cosmetics, never an outfit over them. */
+    public @NotNull Collection<SavedCosmetic> getSavedCosmetics() {
+        return coveredCosmetics != null ? List.copyOf(coveredCosmetics.values()) : snapshotCosmetics().values();
+    }
+
+    private Map<CosmeticSlot, SavedCosmetic> snapshotCosmetics() {
+        Map<CosmeticSlot, SavedCosmetic> snapshot = new LinkedHashMap<>();
+        playerCosmetics.forEach((slot, cosmetic) -> snapshot.put(slot, new SavedCosmetic(cosmetic, colors.get(slot))));
+        return snapshot;
+    }
+
+    private void removeAllCosmetics() {
+        for (CosmeticSlot slot : getSlotsWithCosmetics()) {
+            removeCosmeticSlot(slot);
+        }
+    }
+
+    /** A cosmetic together with the color it was dyed, null when undyed. */
+    public record SavedCosmetic(@NotNull Cosmetic cosmetic, @Nullable Color color) {
     }
 
     @Override

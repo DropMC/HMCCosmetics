@@ -35,8 +35,9 @@ public abstract class Data {
                 if (shouldHiddenSave(reason)) data.append("HIDDEN=").append(reason);
             }
         }
-        for (Cosmetic cosmetic : user.getCosmetics()) {
-            Color color = user.getCosmeticColor(cosmetic.getSlot());
+        for (CosmeticUser.SavedCosmetic saved : user.getSavedCosmetics()) {
+            Cosmetic cosmetic = saved.cosmetic();
+            Color color = saved.color();
             String input = cosmetic.getSlot() + "=" + cosmetic.getId();
             if (color != null) input = input + "&" + color.asRGB();
             if (data.isEmpty()) {

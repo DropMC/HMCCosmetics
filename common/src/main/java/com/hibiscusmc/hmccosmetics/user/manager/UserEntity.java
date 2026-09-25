@@ -2,8 +2,6 @@ package com.hibiscusmc.hmccosmetics.user.manager;
 
 import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.Settings;
-import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
-import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.packets.HMCCPacketManager;
 import lombok.Getter;
@@ -59,14 +57,10 @@ public class UserEntity {
 
         // Go through all nearby players, check if they are new to the viewers list.
         for (Player player : players) {
-            CosmeticUser user = CosmeticUsers.getUser(player);
-            if(
-                user != null
-                && owner != user.getUniqueId()
-                && user.isInWardrobe()
-                // Fixes issue where players in wardrobe would see other players cosmetics if they were not in wardrobe
-                && !player.canSee(ownerPlayer)
-            ) {
+            // Whoever cannot see the owner must not see what floats around them either: a player in the
+            // wardrobe hides everyone else, and a vanished moderator still wears an outfit for the staff
+            // who can see them.
+            if (!owner.equals(player.getUniqueId()) && !player.canSee(ownerPlayer)) {
                 removePlayerIds.add(player.getUniqueId());
                 continue;
             }
