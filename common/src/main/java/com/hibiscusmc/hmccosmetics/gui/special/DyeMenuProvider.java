@@ -5,6 +5,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticHolder;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class DyeMenuProvider {
 
@@ -35,6 +36,14 @@ public class DyeMenuProvider {
             throw new IllegalStateException("Unable to open a dye menu without instance of it.");
         }
         instance.openMenu(viewer, cosmeticHolder, cosmetic);
+    }
+
+    /**
+     * The dye menu implementation in charge, or null before one is set.
+     * @return The current dye menu provider.
+     */
+    public static @Nullable DyeMenu menuProvider() {
+        return instance;
     }
 
     /**

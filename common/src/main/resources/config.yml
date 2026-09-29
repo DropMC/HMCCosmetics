@@ -179,6 +179,10 @@ wardrobe:
   prevent-damage: true
   # If a player is damaged in a wardrobe, and if it's set to true, it'll kick them from the wardrobe (prevent-damage must be false)
   damage-kicked: false
+  # The network API's Bedrock routes (e.g. https://api.example.com/v1/bedrock). A Bedrock form button
+  # gets from there what the client cannot draw on a form image: a dyeable icon painted in its colour
+  # and the player's own skin outlined in an aura's colour. Empty keeps the pack's plain icons.
+  bedrock-api-url: ""
 
   menu-options:
     enter-open-menu: false # If the menu should open when a player enters a wardrobe

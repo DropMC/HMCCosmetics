@@ -49,13 +49,20 @@ public final class BedrockIcons {
     private static final String PACK_PATH = "output/Scaffolding.mcpack";
     private static final String TEXTURE_INDEX = "textures/item_texture.json";
 
-    private static Map<String, String> pathsByModel = Map.of();
+    /**
+     * One Bedrock icon: its name in the pack, which is also what the dye masks are keyed by, and the
+     * path of its texture, which is what a form image points at.
+     */
+    public record Icon(@NotNull String name, @NotNull String path) {
+    }
+
+    private static Map<String, Icon> iconsByModel = Map.of();
     /**
      * Texture path by {@code <material>/<customModelData>}, for the cosmetics that are still a
      * vanilla item plus a model number rather than a Nexo id. Scaffolding writes those as a second
      * kind of entry ({@code type: legacy}), and a whole set of cosmetics is addressed only that way.
      */
-    private static Map<String, String> pathsByLegacyModel = Map.of();
+    private static Map<String, Icon> iconsByLegacyModel = Map.of();
     /** Pack the current index was read from, so a regenerated pack is picked up without a restart. */
     private static long indexedPack = Long.MIN_VALUE;
 
@@ -68,19 +75,19 @@ public final class BedrockIcons {
      * JSON together, which is not something to parse on the main thread while a menu is opening.
      */
     public static void warmUp(@NotNull Plugin plugin) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> texturePath("nexo:warm_up", null));
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> icon("nexo:warm_up", null));
     }
 
     /**
-     * The texture path for a cosmetic's item, by whichever of the two things identifies it.
+     * The Bedrock icon of a cosmetic's item, by whichever of the two things identifies it.
      *
      * @param model the item model key from the cosmetic's {@code material}, e.g. {@code nexo:beanie}
      * @param item  the cosmetic's item, read only when the model is a plain vanilla material and the
      *              icon has to be found by its custom model data instead
-     * @return the path to hand a form image, or null when this item has no Bedrock icon
+     * @return the icon, or null when this item has no Bedrock icon
      */
     @Nullable
-    public static synchronized String texturePath(@Nullable String model, @Nullable ItemStack item) {
+    public static synchronized Icon icon(@Nullable String model, @Nullable ItemStack item) {
         File pack = scaffoldingFile(PACK_PATH);
         long stamp = pack == null ? Long.MIN_VALUE : pack.lastModified();
         if (stamp != indexedPack) {
@@ -89,12 +96,12 @@ public final class BedrockIcons {
         }
 
         if (model != null && model.indexOf(':') >= 0) {
-            String path = pathsByModel.get(model);
-            if (path != null) return path;
+            Icon icon = iconsByModel.get(model);
+            if (icon != null) return icon;
         }
 
         String legacy = legacyKey(item);
-        return legacy == null ? null : pathsByLegacyModel.get(legacy);
+        return legacy == null ? null : iconsByLegacyModel.get(legacy);
     }
 
     /**
@@ -120,8 +127,8 @@ public final class BedrockIcons {
     }
 
     private static void buildIndex(@Nullable File pack) {
-        pathsByModel = Map.of();
-        pathsByLegacyModel = Map.of();
+        iconsByModel = Map.of();
+        iconsByLegacyModel = Map.of();
 
         Map<String, String> icons = readIconNames();
         if (icons.isEmpty() || pack == null || !pack.isFile()) return;
@@ -129,18 +136,18 @@ public final class BedrockIcons {
         Map<String, String> pathsByIcon = readTexturePaths(pack);
         if (pathsByIcon.isEmpty()) return;
 
-        Map<String, String> byModel = new HashMap<>();
-        Map<String, String> byLegacy = new HashMap<>();
-        icons.forEach((key, icon) -> {
-            String path = pathsByIcon.get(icon);
+        Map<String, Icon> byModel = new HashMap<>();
+        Map<String, Icon> byLegacy = new HashMap<>();
+        icons.forEach((key, name) -> {
+            String path = pathsByIcon.get(name);
             if (path == null) return;
             // A legacy key carries the material it was listed under, which a model key never does.
-            if (key.indexOf('/') >= 0) byLegacy.put(key, path);
-            else byModel.put(key, path);
+            if (key.indexOf('/') >= 0) byLegacy.put(key, new Icon(name, path));
+            else byModel.put(key, new Icon(name, path));
         });
 
-        pathsByModel = Map.copyOf(byModel);
-        pathsByLegacyModel = Map.copyOf(byLegacy);
+        iconsByModel = Map.copyOf(byModel);
+        iconsByLegacyModel = Map.copyOf(byLegacy);
         MessagesUtil.sendDebugMessages("Indexed " + byModel.size() + " Bedrock icons by model and "
                 + byLegacy.size() + " by model data");
     }

@@ -1,16 +1,22 @@
 package com.hibiscusmc.hmccosmetics.gui.bedrock;
 
 import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
+import com.hibiscusmc.hmccosmetics.config.WardrobeSettings;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetics;
 import com.hibiscusmc.hmccosmetics.cosmetic.Rarity;
+import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticAuraType;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookCommonsSkins;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.BedrockIcons;
 import com.hibiscusmc.hmccosmetics.util.BedrockText;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
+import me.lojosho.hibiscuscommons.nms.NMSHandlers;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.cumulus.util.FormImage;
 import org.geysermc.floodgate.api.FloodgateApi;
@@ -21,6 +27,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 /**
  * The wardrobe menu as a Bedrock form, for players whose camera is pinned to the mannequin.
@@ -29,10 +39,11 @@ import java.util.Map;
  * menu everyone else gets does not reliably appear there however often the server opens it. A form
  * does, and a pinned camera still lets the player touch one, which makes it the way in on Bedrock.
  * </p>
- * Each button carries the cosmetic's own icon out of the converted pack ({@link BedrockIcons}), the
- * rarity and badges as words rather than as the glyphs the chest menu draws them with, and the
- * description. What Bedrock cannot show at all is said on the button rather than left to surprise
- * the player: an aura has no effect there, and a dye keeps none of its colour.
+ * Each button carries the cosmetic's own icon out of the converted pack ({@link BedrockIcons}), with
+ * the rarity and badges under the name. The client does not tint a form image, so when
+ * {@code wardrobe.bedrock-api-url} is set a dyeable icon is fetched already painted in its colour, and
+ * an aura is shown as the player's own skin outlined in the aura's colour ({@link HookCommonsSkins}).
+ * A dyeable cosmetic is put on through a {@link BedrockDyeForm}, the way Java opens its dye menu.
  */
 public final class BedrockWardrobeForm {
 
@@ -44,22 +55,8 @@ public final class BedrockWardrobeForm {
     private static final String BACK = "Voltar";
     private static final String LEAVE = "§cSair do provador";
 
-    private static final String DYE_WARNING_KEY = "wardrobe-bedrock-dye";
-    private static final String DYE_WARNING_FALLBACK = "§eCosméticos tingíveis ficam brancos no Bedrock.";
-
-    /**
-     * What a whole category cannot show on Bedrock, said on its button and again inside it, because
-     * it is the only thing that separates a limitation of that edition from a cosmetic being broken.
-     * <p>
-     * An aura is a glow that edition has no equivalent for.
-     * </p>
-     */
-    private static final Map<String, SlotWarning> SLOT_WARNINGS = Map.of(
-            "AURA", new SlotWarning("wardrobe-bedrock-aura", "§eNão aparecem no Bedrock."));
-
-    /** A warning's message key, with the text to fall back on when the live file has no such key. */
-    private record SlotWarning(@NotNull String key, @NotNull String fallback) {
-    }
+    /** What an icon name may be to go into a URL as is, which every name Scaffolding writes already is. */
+    private static final Pattern URL_SAFE_ICON = Pattern.compile("[A-Za-z0-9_.-]{1,128}");
 
     private static final String EQUIPPED_NOTE = "  §aEquipado";
 
@@ -99,6 +96,10 @@ public final class BedrockWardrobeForm {
         final Player player = user.getPlayer();
         if (player == null) return;
 
+        withSkin(player, skin -> openCategories(user, skin));
+    }
+
+    private static void openCategories(@NotNull CosmeticUser user, @Nullable HookCommonsSkins.Skin skin) {
         final List<CosmeticSlot> slots = slotsWithCosmetics(user);
         final List<Runnable> actions = new ArrayList<>();
         final SimpleForm.Builder form = SimpleForm.builder()
@@ -109,7 +110,7 @@ public final class BedrockWardrobeForm {
             final Cosmetic equipped = user.getCosmetic(slot);
             // The category wears the icon of what is equipped in it, which is the quickest way to
             // see the whole outfit without opening anything.
-            button(form, categoryLabel(player, slot, equipped), equipped);
+            button(form, categoryLabel(slot, equipped), equipped, colorOf(user, equipped), skin);
             actions.add(() -> openSlot(user, slot));
         }
 
@@ -128,12 +129,17 @@ public final class BedrockWardrobeForm {
         final Player player = user.getPlayer();
         if (player == null) return;
 
+        withSkin(player, skin -> openSlot(user, player, slot, skin));
+    }
+
+    private static void openSlot(@NotNull CosmeticUser user, @NotNull Player player, @NotNull CosmeticSlot slot,
+                                 @Nullable HookCommonsSkins.Skin skin) {
         final List<Cosmetic> cosmetics = cosmeticsFor(user, slot);
         final Cosmetic equipped = user.getCosmetic(slot);
         final List<Runnable> actions = new ArrayList<>();
         final SimpleForm.Builder form = SimpleForm.builder()
                 .title(slotName(slot))
-                .content(slotContent(player, slot, cosmetics));
+                .content(cosmetics.isEmpty() ? NOTHING_AVAILABLE : PICK_COSMETIC);
 
         form.button(BACK);
         actions.add(() -> open(user));
@@ -147,12 +153,19 @@ public final class BedrockWardrobeForm {
         }
 
         for (final Cosmetic cosmetic : cosmetics) {
-            button(form, cosmeticLabel(player, cosmetic, cosmetic.equals(equipped)), cosmetic);
+            button(form, cosmeticLabel(player, cosmetic, cosmetic.equals(equipped)), cosmetic, colorOf(user, cosmetic), skin);
             actions.add(() -> {
                 // Read the slot again rather than trusting the capture: the form has been on screen
                 // for a while, and a reward or a lost permission may have changed it meanwhile.
-                if (cosmetic.equals(user.getCosmetic(slot))) user.removeCosmeticSlot(cosmetic);
-                else user.addCosmetic(cosmetic);
+                if (cosmetic.equals(user.getCosmetic(slot))) {
+                    user.removeCosmeticSlot(cosmetic);
+                } else if (cosmetic.isDyeable() && BedrockDyeForm.available()) {
+                    // As on Java, a dyeable cosmetic is put on through the colour it is put on in.
+                    BedrockDyeForm.open(user, cosmetic, () -> openSlot(user, slot), () -> open(user));
+                    return;
+                } else {
+                    user.addCosmetic(cosmetic);
+                }
                 // Back to the categories rather than to this list: picking one is usually the end of
                 // what the player came to do, and the mannequin is a tap away from there.
                 open(user);
@@ -162,64 +175,97 @@ public final class BedrockWardrobeForm {
         send(user, form, actions);
     }
 
-    /** The category name, plus what is worn in it and anything Bedrock will not show about it. */
+    /** The category name, plus what is worn in it. */
     @NotNull
-    private static String categoryLabel(@NotNull Player player, @NotNull CosmeticSlot slot, @Nullable Cosmetic equipped) {
-        StringBuilder label = new StringBuilder(slotName(slot));
-        if (equipped != null) label.append('\n').append(coloured(equipped));
-
-        String warning = slotWarning(player, slot);
-        if (warning != null) label.append('\n').append(warning);
-
-        return label.toString();
+    private static String categoryLabel(@NotNull CosmeticSlot slot, @Nullable Cosmetic equipped) {
+        return equipped == null ? slotName(slot) : slotName(slot) + '\n' + coloured(equipped);
     }
 
-    /**
-     * The name, with the badges under it: the same glyphs the chest menu draws on the item, out of
-     * the cosmetic's own definition, minus the dyeable one. Nothing is dyeable on Bedrock.
-     */
+    /** The name, with the badges under it: the same glyphs the chest menu draws on the item. */
     @NotNull
     private static String cosmeticLabel(@NotNull Player player, @NotNull Cosmetic cosmetic, boolean equipped) {
         StringBuilder label = new StringBuilder(coloured(cosmetic));
         if (equipped) label.append(EQUIPPED_NOTE);
 
-        String badges = cosmetic.buildBadgeLine(false);
+        String badges = cosmetic.buildBadgeLine();
         if (badges != null) label.append('\n').append(BedrockText.fromMiniMessage(player, badges));
 
         return label.toString();
     }
 
-    /** The form's header, carrying whatever warning this category needs. */
-    @NotNull
-    private static String slotContent(@NotNull Player player, @NotNull CosmeticSlot slot, @NotNull List<Cosmetic> cosmetics) {
-        if (cosmetics.isEmpty()) return NOTHING_AVAILABLE;
-
-        String warning = slotWarning(player, slot);
-        if (warning != null) return warning;
-
-        if (cosmetics.stream().anyMatch(Cosmetic::isDyeable)) {
-            return PICK_COSMETIC + "\n" + BedrockText.fromKey(player, DYE_WARNING_KEY, DYE_WARNING_FALLBACK);
+    /**
+     * Runs {@code then} with the skin this player shows, or null without one. Right away when it is
+     * already known, which for a player wearing it is always; otherwise on the main thread once it
+     * resolves. Nothing is asked when there is no API to draw it with.
+     */
+    private static void withSkin(@NotNull Player player, @NotNull Consumer<HookCommonsSkins.Skin> then) {
+        if (WardrobeSettings.getBedrockApiUrl().isEmpty()) {
+            then.accept(null);
+            return;
         }
-        return PICK_COSMETIC;
-    }
 
-    /** What this category cannot show on Bedrock, or null when it shows normally. */
-    @Nullable
-    private static String slotWarning(@NotNull Player player, @NotNull CosmeticSlot slot) {
-        SlotWarning warning = SLOT_WARNINGS.get(slot.getName());
-        return warning == null ? null : BedrockText.fromKey(player, warning.key(), warning.fallback());
+        final CompletableFuture<Optional<HookCommonsSkins.Skin>> skin = HookCommonsSkins.skin(player);
+        if (skin.isDone()) {
+            then.accept(skin.join().orElse(null));
+            return;
+        }
+        skin.thenAccept(found -> Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(),
+                () -> then.accept(found.orElse(null))));
     }
 
     /**
      * Adds a button showing the cosmetic's icon, or a plain one when the pack has no icon for it
      * (Scaffolding missing, or a cosmetic added since it last generated).
+     * <p>
+     * The client shows a form image exactly as it gets it, so two kinds come from the API instead:
+     * an aura is the viewer's {@code skin} outlined in its colour, and a dyeable one with a colour is
+     * its icon painted in it. Without the API URL (or a skin, for an aura) the pack's icon stays.
+     * </p>
      */
-    private static void button(@NotNull SimpleForm.Builder form, @NotNull String label, @Nullable Cosmetic cosmetic) {
-        final String texture = cosmetic == null
-                ? null
-                : BedrockIcons.texturePath(cosmetic.getMaterial(), cosmetic.getItem());
-        if (texture == null) form.button(label);
-        else form.button(label, FormImage.Type.PATH, texture);
+    static void button(@NotNull SimpleForm.Builder form, @NotNull String label, @Nullable Cosmetic cosmetic,
+                       @Nullable Color color, @Nullable HookCommonsSkins.Skin skin) {
+        final String apiUrl = WardrobeSettings.getBedrockApiUrl();
+        if (cosmetic instanceof CosmeticAuraType aura && skin != null && !apiUrl.isEmpty()) {
+            final String model = skin.slim() ? "slim" : "classic";
+            final int rgb = aura.getColor().asBungee().getColor().getRGB();
+            form.button(label, FormImage.Type.URL,
+                    apiUrl + "/auras/" + skin.texture() + "/" + model + "/" + String.format("%06x", rgb & 0xFFFFFF) + ".png");
+            return;
+        }
+
+        final BedrockIcons.Icon icon = cosmetic == null ? null : BedrockIcons.icon(cosmetic.getMaterial(), cosmetic.getItem());
+        if (icon == null) {
+            form.button(label);
+            return;
+        }
+
+        if (color != null && !apiUrl.isEmpty() && URL_SAFE_ICON.matcher(icon.name()).matches()) {
+            form.button(label, FormImage.Type.URL, apiUrl + "/icons/" + icon.name() + "/" + hex(color) + ".png");
+        } else {
+            form.button(label, FormImage.Type.PATH, icon.path());
+        }
+    }
+
+    /**
+     * The colour a dyeable cosmetic shows in: the one this player dyed it, when it is the one they
+     * wear, otherwise the colour its item comes in. Null for a cosmetic that is not dyeable.
+     */
+    @Nullable
+    private static Color colorOf(@NotNull CosmeticUser user, @Nullable Cosmetic cosmetic) {
+        if (cosmetic == null || !cosmetic.isDyeable()) return null;
+
+        if (cosmetic.equals(user.getCosmetic(cosmetic.getSlot()))) {
+            final Color dyed = user.getCosmeticColor(cosmetic.getSlot());
+            if (dyed != null) return dyed;
+        }
+
+        final ItemStack item = cosmetic.getItem();
+        return item == null || !item.hasItemMeta() ? null : NMSHandlers.getHandler().getUtilHandler().getColor(item);
+    }
+
+    @NotNull
+    private static String hex(@NotNull Color color) {
+        return String.format("%06x", color.asRGB());
     }
 
     /** The cosmetic's name, in the section code its rarity is drawn with. */
@@ -236,7 +282,7 @@ public final class BedrockWardrobeForm {
      * the mannequin, and punching or jumping brings this back.
      * </p>
      */
-    private static void send(@NotNull CosmeticUser user, @NotNull SimpleForm.Builder form, @NotNull List<Runnable> actions) {
+    static void send(@NotNull CosmeticUser user, @NotNull SimpleForm.Builder form, @NotNull List<Runnable> actions) {
         final Player player = user.getPlayer();
         if (player == null) return;
 

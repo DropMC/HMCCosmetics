@@ -177,6 +177,11 @@ public class InternalDyeMenu implements DyeMenu {
         }
     }
 
+    /** The colours this menu offers, in the order the config lists them, each with its shades. */
+    public @NotNull List<PrimaryColor> palette() {
+        return PRIMARY_COLORS == null ? List.of() : List.copyOf(PRIMARY_COLORS);
+    }
+
     @Override
     public void openMenu(@NotNull Player viewer, @NotNull CosmeticHolder cosmeticHolder, @NotNull Cosmetic cosmetic) {
         if (ROWS == 0 || ROWS >= 7) {
