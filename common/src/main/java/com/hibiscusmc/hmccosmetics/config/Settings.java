@@ -69,6 +69,11 @@ public class Settings {
     private static final String EQUIPPED_COSMETIC_COLOR_PATH = "equipped-cosmetic-color";
     private static final String EQUIPABLE_COSMETIC_COLOR_PATH = "equipable-cosmetic-color";
     private static final String LOCKED_COSMETIC_COLOR_PATH = "locked-cosmetic-color";
+    private static final String EQUIPPED_GLYPH_PATH = "equipped-glyph";
+    private static final String OWNED_GLYPH_PATH = "owned-glyph";
+    private static final String LOCKED_GLYPH_PATH = "locked-glyph";
+    private static final String BACKGROUND_WIDTH_PATH = "background-width";
+    private static final String TILE_WIDTH_PATH = "tile-width";
     private static final String ENABLED_PATH = "enabled";
     private static final String SLOT_OPTIONS_PATH = "slot-options";
     private static final String BACKPACK_PREVENT_DARKNESS_PATH = "backpack-prevent-darkness";
@@ -175,6 +180,19 @@ public class Settings {
     private static String equipableCosmeticColor;
     @Getter
     private static String lockedCosmeticColor;
+    /** GLYPH shading: the tile drawn behind a slot per state, with {@code <row>} for the slot's row. */
+    @Getter
+    private static String equippedGlyph;
+    @Getter
+    private static String ownedGlyph;
+    @Getter
+    private static String lockedGlyph;
+    /** GLYPH shading: how far back the title is from the background's left edge once it is drawn. */
+    @Getter
+    private static int backgroundWidth;
+    /** GLYPH shading: how far a tile moves the title cursor, its width plus the font's one pixel gap. */
+    @Getter
+    private static int tileWidth;
     @Getter @Setter
     private static boolean allPlayersHidden;
     @Getter
@@ -268,6 +286,11 @@ public class Settings {
         equippedCosmeticColor = shadingSettings.node(EQUIPPED_COSMETIC_COLOR_PATH).getString();
         equipableCosmeticColor = shadingSettings.node(EQUIPABLE_COSMETIC_COLOR_PATH).getString();
         lockedCosmeticColor = shadingSettings.node(LOCKED_COSMETIC_COLOR_PATH).getString();
+        equippedGlyph = shadingSettings.node(EQUIPPED_GLYPH_PATH).getString("");
+        ownedGlyph = shadingSettings.node(OWNED_GLYPH_PATH).getString("");
+        lockedGlyph = shadingSettings.node(LOCKED_GLYPH_PATH).getString("");
+        backgroundWidth = shadingSettings.node(BACKGROUND_WIDTH_PATH).getInt(176);
+        tileWidth = shadingSettings.node(TILE_WIDTH_PATH).getInt(17);
 
         ConfigurationNode cosmeticTypeSettings = menuSettings.node(COSMETIC_TYPE_SETTINGS_PATH);
         cosmeticEquipClickType = cosmeticTypeSettings.node(EQUIP_CLICK_TYPE).getString("ANY");

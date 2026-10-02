@@ -32,6 +32,7 @@ import me.lojosho.hibiscuscommons.nms.NMSHandlers;
 import me.lojosho.hibiscuscommons.util.InventoryUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -74,6 +75,13 @@ public class CosmeticUser implements CosmeticHolder {
     private final HashMap<CosmeticSlot, Color> colors = new HashMap<>();
     /** What the worn outfit covered up, or null while none is worn. See {@link #wearOutfit(Collection)}. */
     private @Nullable Map<CosmeticSlot, SavedCosmetic> coveredCosmetics;
+    /**
+     * Slots wearing a wardrobe preview, each mapped to what it held before the first preview (empty
+     * when it held nothing). See {@link #previewCosmetic(Cosmetic)}.
+     */
+    private final Map<CosmeticSlot, Optional<SavedCosmetic>> previewCovered = new HashMap<>();
+    /** Set while a preview is put on or taken off, so those changes don't count as a real choice. */
+    private boolean applyingPreview;
 
     /** Last entity flag byte sent for the aura, or null when none is applied. See {@link #refreshAuraOnStateChange()}. */
     private Byte lastAuraFlags;
@@ -283,6 +291,7 @@ public class CosmeticUser implements CosmeticHolder {
         }
         cosmetic = event.getCosmetic();
         // Internal
+        if (!applyingPreview) previewCovered.remove(cosmetic.getSlot());
         if (playerCosmetics.containsKey(cosmetic.getSlot())) {
             removeCosmeticSlot(cosmetic.getSlot());
         }
@@ -334,6 +343,7 @@ public class CosmeticUser implements CosmeticHolder {
             return;
         }
         // Internal
+        if (!applyingPreview) previewCovered.remove(slot);
         if (slot == CosmeticSlot.BACKPACK) {
             despawnBackpack();
         }
@@ -364,6 +374,7 @@ public class CosmeticUser implements CosmeticHolder {
      * first and still gives back the original set.
      */
     public void wearOutfit(@NotNull Collection<Cosmetic> outfit) {
+        endAllPreviews();
         if (coveredCosmetics == null) {
             coveredCosmetics = snapshotCosmetics();
         }
@@ -391,15 +402,91 @@ public class CosmeticUser implements CosmeticHolder {
         return coveredCosmetics != null;
     }
 
-    /** What the database stores for this player: their own cosmetics, never an outfit over them. */
+    /**
+     * Puts a cosmetic the player may not own on them for the wardrobe to show, without it becoming
+     * theirs: the slot remembers what it held before the first preview, the database keeps receiving
+     * that, and {@link #endPreview(CosmeticSlot)} gives it back. Equipping or removing anything in the
+     * slot for real drops the preview's claim on it.
+     */
+    public void previewCosmetic(@NotNull Cosmetic cosmetic) {
+        CosmeticSlot slot = cosmetic.getSlot();
+        previewCovered.computeIfAbsent(slot, s -> Optional.ofNullable(savedCosmetic(s)));
+        applyingPreview = true;
+        try {
+            addCosmetic(cosmetic);
+        } finally {
+            applyingPreview = false;
+        }
+    }
+
+    /** Whether previews are possible right now: only once the wardrobe is fully running. */
+    public boolean canPreview() {
+        return isInWardrobe() && userWardrobeManager.getWardrobeStatus() == UserWardrobeManager.WardrobeStatus.RUNNING;
+    }
+
+    /**
+     * Previews {@code cosmetic}, or takes it off when it is already being previewed, and tells the
+     * player which of the two happened.
+     */
+    public void togglePreview(@NotNull Cosmetic cosmetic) {
+        Player player = getPlayer();
+        if (isPreviewing(cosmetic)) {
+            endPreview(cosmetic.getSlot());
+            if (player != null) MessagesUtil.sendMessage(player, "cosmetic-preview-end", Placeholder.parsed("cosmetic", cosmetic.getPlainName()));
+        } else {
+            previewCosmetic(cosmetic);
+            if (player != null) MessagesUtil.sendMessage(player, "cosmetic-preview", Placeholder.parsed("cosmetic", cosmetic.getPlainName()));
+        }
+    }
+
+    /** Whether {@code cosmetic} is on the player as a preview rather than as their own. */
+    public boolean isPreviewing(@NotNull Cosmetic cosmetic) {
+        return previewCovered.containsKey(cosmetic.getSlot()) && cosmetic.equals(getCosmetic(cosmetic.getSlot()));
+    }
+
+    /** Takes the preview off {@code slot} and puts back what it held. Does nothing without a preview there. */
+    public void endPreview(@NotNull CosmeticSlot slot) {
+        Optional<SavedCosmetic> covered = previewCovered.remove(slot);
+        if (covered == null) return;
+
+        applyingPreview = true;
+        try {
+            if (covered.isPresent()) {
+                addCosmetic(covered.get().cosmetic(), covered.get().color());
+            } else {
+                removeCosmeticSlot(slot);
+            }
+        } finally {
+            applyingPreview = false;
+        }
+    }
+
+    /** Takes off every preview. The wardrobe calls it on the way out. */
+    public void endAllPreviews() {
+        for (CosmeticSlot slot : List.copyOf(previewCovered.keySet())) {
+            endPreview(slot);
+        }
+    }
+
+    /** What the database stores for this player: their own cosmetics, never an outfit or a preview over them. */
     public @NotNull Collection<SavedCosmetic> getSavedCosmetics() {
         return coveredCosmetics != null ? List.copyOf(coveredCosmetics.values()) : snapshotCosmetics().values();
     }
 
+    /** What the player owns and wears, with every previewed slot reverted to what it held before. */
     private Map<CosmeticSlot, SavedCosmetic> snapshotCosmetics() {
         Map<CosmeticSlot, SavedCosmetic> snapshot = new LinkedHashMap<>();
         playerCosmetics.forEach((slot, cosmetic) -> snapshot.put(slot, new SavedCosmetic(cosmetic, colors.get(slot))));
+        previewCovered.forEach((slot, covered) -> {
+            if (covered.isPresent()) snapshot.put(slot, covered.get());
+            else snapshot.remove(slot);
+        });
         return snapshot;
+    }
+
+    private @Nullable SavedCosmetic savedCosmetic(@NotNull CosmeticSlot slot) {
+        Cosmetic cosmetic = playerCosmetics.get(slot);
+        return cosmetic == null ? null : new SavedCosmetic(cosmetic, colors.get(slot));
     }
 
     private void removeAllCosmetics() {

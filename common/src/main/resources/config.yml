@@ -116,8 +116,18 @@ menu-settings:
     # Below is the shading mechanism behind cosmetic items. This is a bit complicated, but it allows for a lot of customization.
     # The shading is done through the title and by shifting textures around. This is done by offsets.
     # Only Nexo is support by default. Vanilla can't properly handle it without a lot of unicodes and ItemsAdder adds weird offsets and decolors it. (This is why it is disabled by default)
-    # Enable by using MODERN or TEXT
+    # Enable by using MODERN, TEXT or GLYPH
     type: NONE
+    # GLYPH (DropMC fork) paints one tile behind each cosmetic slot: the glyph of the slot's row in
+    # the colour of its state (equipped, owned, not owned; a wardrobe preview counts as not owned).
+    # <row> is the slot's row, counted from 0. These keys must stay here: the startup sync drops any
+    # key of the live config.yml that this file does not have.
+    equipped-glyph: ""
+    owned-glyph: ""
+    locked-glyph: ""
+    # Width of the menu background glyph, and how far one tile moves the cursor (16 + 1).
+    background-width: 176
+    tile-width: 17
     first-row-shift: "<shift:-153>" # Nexo: "<shift:-153>"
     sequent-row-shift: " <shift:-153>" # Nexo: " <shift:-153>" (Space is important here!)
     individual-column-shift: "<shift:-3>" # Nexo: "<shift:-3>"

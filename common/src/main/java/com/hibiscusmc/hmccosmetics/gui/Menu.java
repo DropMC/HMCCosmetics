@@ -55,6 +55,15 @@ public class Menu {
         NAME_COLLATOR.setStrength(Collator.PRIMARY);
     }
 
+    /**
+     * GLYPH shading geometry, in title pixels from the background's left edge: where the cursor sits
+     * once rewound there (the background glyph advances one pixel past its width), where the first
+     * slot's 16px interior starts, and the distance between two slots.
+     */
+    private static final int TILE_ORIGIN_X = 1;
+    private static final int FIRST_SLOT_X = 8;
+    private static final int SLOT_PITCH = 18;
+
     @Getter
     private final String id;
     @Getter
@@ -302,12 +311,16 @@ public class Menu {
         }
         Menus.setLastOpened(viewer.getUniqueId(), this);
 
-        // The page arrows and counter live in the title, so the first page's title is composed here
-        // rather than pushed later: updating a title replaces the inventory, which cannot be done
-        // while the menu is still opening.
+        // The page arrows, the counter and the slot tiles live in the title, so the first page's title
+        // is composed here rather than pushed later: updating a title replaces the inventory, which
+        // cannot be done while the menu is still opening, and a title that differs from what
+        // updateMenu composes makes it reopen the menu right after it opened.
         PageState state = new PageState();
         state.page = wardrobeEntryPage(cosmeticHolder);
-        state.title = pagination == null ? this.title : this.title + paginationTitle(state);
+        String tiles = Settings.getShadingType() == ShadingType.GLYPH
+                ? slotTiles(cosmeticHolder, pagination == null ? Map.of() : pageSlice(cosmeticHolder, state))
+                : "";
+        state.title = this.title + tiles + (pagination == null ? "" : paginationTitle(state));
         // paginationTitle clamps the page it was handed, which matters when the remembered page no
         // longer exists because the menu got shorter (a cosmetic disabled, a permission lost).
         rememberWardrobePage(cosmeticHolder, state.page);
@@ -465,12 +478,15 @@ public class Menu {
 
         // Pagination fills its own slots and contributes the arrows and the page counter to the title,
         // so it runs for every shading type rather than only the one that rewrites the title.
+        Map<Integer, MenuItem> pageItems = pagination != null ? placePaginatedItems(viewer, cosmeticHolder, gui, state) : Map.of();
+        if (Settings.getShadingType() == ShadingType.GLYPH) {
+            title.append(slotTiles(cosmeticHolder, pageItems));
+        }
         if (pagination != null) {
-            placePaginatedItems(viewer, cosmeticHolder, gui, state);
             title.append(paginationTitle(state));
         }
 
-        if (Settings.getShadingType() != ShadingType.TEXT && pagination == null) return;
+        if (Settings.getShadingType() != ShadingType.TEXT && Settings.getShadingType() != ShadingType.GLYPH && pagination == null) return;
 
         // Only push a title that actually changed: updateTitle() reopens the inventory for everyone
         // looking at it, so pushing on every click would flicker the whole menu.
@@ -493,6 +509,56 @@ public class Menu {
     }
 
     /**
+     * GLYPH shading: one tile behind every cosmetic slot, coloured by whether the holder wears it, owns
+     * it or not (a preview counts as not owned). The walk starts at the background's left edge and
+     * moves an absolute cursor from slot to slot, then hands the title back where it found it, so what
+     * is appended after this is measured exactly as without tiles. The vertical place comes from the
+     * glyph of the slot's row, which is why each state has one glyph per row.
+     */
+    @NotNull
+    private String slotTiles(@NotNull CosmeticHolder cosmeticHolder, @NotNull Map<Integer, MenuItem> pageItems) {
+        Map<Integer, Cosmetic> cosmetics = new TreeMap<>();
+        items.forEach((slot, slotItems) -> {
+            Cosmetic cosmetic = paginatedCosmetic(slotItems.getFirst());
+            if (cosmetic != null) cosmetics.put(slot, cosmetic);
+        });
+        pageItems.forEach((slot, item) -> {
+            Cosmetic cosmetic = paginatedCosmetic(item);
+            if (cosmetic != null) cosmetics.put(slot, cosmetic);
+        });
+
+        StringBuilder tiles = new StringBuilder(shift(-Settings.getBackgroundWidth()));
+        int cursor = TILE_ORIGIN_X;
+        for (Map.Entry<Integer, Cosmetic> entry : cosmetics.entrySet()) {
+            int slot = entry.getKey();
+            // Slots past the chest are the player's inventory, which the title does not reach
+            if (slot >= rows * 9) continue;
+
+            String glyph = tileGlyph(cosmeticHolder, entry.getValue());
+            if (glyph.isEmpty()) continue;
+
+            int x = FIRST_SLOT_X + SLOT_PITCH * (slot % 9);
+            tiles.append(shift(x - cursor)).append(glyph.replace("<row>", String.valueOf(slot / 9)));
+            cursor = x + Settings.getTileWidth();
+        }
+        tiles.append(shift(TILE_ORIGIN_X - cursor + Settings.getBackgroundWidth()));
+        return tiles.toString();
+    }
+
+    @NotNull
+    private static String tileGlyph(@NotNull CosmeticHolder cosmeticHolder, @NotNull Cosmetic cosmetic) {
+        boolean previewing = cosmeticHolder instanceof CosmeticUser user && user.isPreviewing(cosmetic);
+        if (cosmeticHolder.hasCosmeticInSlot(cosmetic) && !previewing) return Settings.getEquippedGlyph();
+        if (cosmeticHolder.canEquipCosmetic(cosmetic, true)) return Settings.getOwnedGlyph();
+        return Settings.getLockedGlyph();
+    }
+
+    @NotNull
+    private static String shift(int pixels) {
+        return pixels == 0 ? "" : "<shift:" + pixels + ">";
+    }
+
+    /**
      * The fragment appended to the title for the current page: each arrow in its enabled or disabled
      * form, then the page counter centred in the bar painted into the background.
      */
@@ -509,25 +575,38 @@ public class Menu {
                 + pagination.indicator().replace("%page%", String.valueOf(state.page)).replace("%pages%", String.valueOf(pages));
     }
 
-    /** Places the current page's items, clearing any slot the page does not reach, plus both arrows. */
-    private void placePaginatedItems(Player viewer, CosmeticHolder cosmeticHolder, Gui gui, PageState state) {
-        List<Integer> slots = pagination.slots();
+    /**
+     * Places the current page's items, clearing any slot the page does not reach, plus both arrows.
+     * Answers what went into each slot, for the tiles painted behind them.
+     */
+    private Map<Integer, MenuItem> placePaginatedItems(Player viewer, CosmeticHolder cosmeticHolder, Gui gui, PageState state) {
         int pages = pageCount();
-        state.page = Math.clamp(state.page, 1, pages);
-
-        List<MenuItem> sortedItems = sortPaginatedItems(cosmeticHolder);
-        int start = (state.page - 1) * slots.size();
-        for (int i = 0; i < slots.size(); i++) {
-            int slot = slots.get(i);
-            int index = start + i;
-            if (index >= sortedItems.size()
-                    || !placeItem(viewer, cosmeticHolder, gui, slot, sortedItems.get(index), null, state)) {
+        Map<Integer, MenuItem> placed = pageSlice(cosmeticHolder, state);
+        for (int slot : pagination.slots()) {
+            MenuItem item = placed.get(slot);
+            if (item == null || !placeItem(viewer, cosmeticHolder, gui, slot, item, null, state)) {
+                placed.remove(slot);
                 gui.removeItem(slot);
             }
         }
 
         placePageButtons(viewer, cosmeticHolder, gui, state, pagination.previousSlots(), pagination.previousButton(), -1, state.page > 1);
         placePageButtons(viewer, cosmeticHolder, gui, state, pagination.nextSlots(), pagination.nextButton(), 1, state.page < pages);
+        return placed;
+    }
+
+    /** Which item the current page puts in each paginated slot, clamping the page first. */
+    private Map<Integer, MenuItem> pageSlice(@NotNull CosmeticHolder cosmeticHolder, @NotNull PageState state) {
+        List<Integer> slots = pagination.slots();
+        state.page = Math.clamp(state.page, 1, pageCount());
+
+        Map<Integer, MenuItem> slice = new HashMap<>();
+        List<MenuItem> sortedItems = sortPaginatedItems(cosmeticHolder);
+        int start = (state.page - 1) * slots.size();
+        for (int i = 0; i < slots.size() && start + i < sortedItems.size(); i++) {
+            slice.put(slots.get(i), sortedItems.get(start + i));
+        }
+        return slice;
     }
 
     /**
@@ -566,6 +645,26 @@ public class Menu {
     private static Cosmetic paginatedCosmetic(@NotNull MenuItem item) {
         if (!(item.type() instanceof TypeCosmetic)) return null;
         return Cosmetics.getCosmetic(item.itemConfig().node("cosmetic").getString(""));
+    }
+
+    /**
+     * Every cosmetic this menu shows a button for, fixed or paginated. What the menus list is what the
+     * server offers, which is how the Bedrock wardrobe tells a cosmetic for sale from an internal one.
+     */
+    @NotNull
+    public Set<Cosmetic> listedCosmetics() {
+        Set<Cosmetic> listed = new LinkedHashSet<>();
+        for (List<MenuItem> slotItems : items.values()) {
+            for (MenuItem item : slotItems) {
+                Cosmetic cosmetic = paginatedCosmetic(item);
+                if (cosmetic != null) listed.add(cosmetic);
+            }
+        }
+        for (MenuItem item : paginatedItems) {
+            Cosmetic cosmetic = paginatedCosmetic(item);
+            if (cosmetic != null) listed.add(cosmetic);
+        }
+        return listed;
     }
 
     /**

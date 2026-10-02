@@ -454,6 +454,9 @@ public class UserWardrobeManager {
         Runnable run = () -> {
             this.active = false;
 
+            // Previews give back what they covered, so the loop below never sees them
+            user.endAllPreviews();
+
             // For Wardrobe Temp Cosmetics
             for (Cosmetic cosmetic : user.getCosmetics()) {
                 MessagesUtil.sendDebugMessages("Checking... " + cosmetic.getId());

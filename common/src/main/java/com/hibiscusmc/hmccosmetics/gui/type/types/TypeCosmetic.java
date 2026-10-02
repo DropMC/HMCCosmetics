@@ -54,6 +54,11 @@ public class TypeCosmetic extends Type {
         final ConfigurationNode actionConfig = config.node("actions");
 
         if (!cosmeticHolder.canEquipCosmetic(cosmetic)) {
+            // In the wardrobe a cosmetic the player doesn't own goes on the mannequin as a preview
+            if (cosmeticHolder instanceof CosmeticUser user && user.canPreview()) {
+                user.togglePreview(cosmetic);
+                return;
+            }
             MessagesUtil.sendDebugMessages("No Cosmetic Permission");
             MessagesUtil.sendMessage(viewer, "no-cosmetic-permission");
             try {

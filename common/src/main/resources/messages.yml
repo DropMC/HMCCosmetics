@@ -7,6 +7,9 @@ reloaded: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Configurações recarreg
 not-enough-args: "<glyph:exclamation:3> <red><b>ERRO!</b> Quantidade de argumentos inválida."
 no-permission: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não tem permissão para isso."
 no-cosmetic-permission: "<glyph:exclamation:3> <red><b>ERRO!</b> Você não tem permissão para este cosmético."
+# Clicking a cosmetic the player does not own inside the wardrobe tries it on the mannequin.
+cosmetic-preview: "<glyph:exclamation:2> <yellow><b>AVISO!</b> Você está experimentando <white><cosmetic></white>. Compre na <white>/loja</white> para usá-lo fora do provador."
+cosmetic-preview-end: "<glyph:exclamation:1> <green><b>SUCESSO!</b> Você tirou <cosmetic>."
 no-cosmetic-slot: "<glyph:exclamation:3> <red><b>ERRO!</b> Não há nenhum cosmético neste slot."
 on-click-cooldown: "<glyph:exclamation:2> <yellow><b>AVISO!</b> Espere um pouco antes de fazer isso de novo."
 

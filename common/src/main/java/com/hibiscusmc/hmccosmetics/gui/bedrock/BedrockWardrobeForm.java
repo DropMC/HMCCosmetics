@@ -7,6 +7,8 @@ import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetics;
 import com.hibiscusmc.hmccosmetics.cosmetic.Rarity;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticAuraType;
+import com.hibiscusmc.hmccosmetics.gui.Menu;
+import com.hibiscusmc.hmccosmetics.gui.Menus;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookCommonsSkins;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.BedrockIcons;
@@ -25,9 +27,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -49,8 +53,9 @@ public final class BedrockWardrobeForm {
 
     private static final String TITLE = "Cosméticos";
     private static final String PICK_CATEGORY = "Escolha uma categoria.";
-    private static final String PICK_COSMETIC = "Toque em um cosmético para equipar ou remover.";
-    private static final String NOTHING_AVAILABLE = "Você ainda não tem cosméticos aqui.";
+    private static final String PICK_COSMETIC = "Toque em um cosmético para equipar ou remover. "
+            + "Os que você não possui podem ser experimentados no manequim.";
+    private static final String NOTHING_AVAILABLE = "Nenhum cosmético aqui ainda.";
     private static final String REMOVE = "§cRemover";
     private static final String BACK = "Voltar";
     private static final String LEAVE = "§cSair do provador";
@@ -58,7 +63,11 @@ public final class BedrockWardrobeForm {
     /** What an icon name may be to go into a URL as is, which every name Scaffolding writes already is. */
     private static final Pattern URL_SAFE_ICON = Pattern.compile("[A-Za-z0-9_.-]{1,128}");
 
+    /** The state note after the name, in the colours the Java menu tints the slot with. */
     private static final String EQUIPPED_NOTE = "  §aEquipado";
+    private static final String OWNED_NOTE = "  §ePossui";
+    private static final String LOCKED_NOTE = "  §cNão possui";
+    private static final String PREVIEWING_NOTE = "  §cExperimentando";
 
     /**
      * The section code each rarity is drawn with, written out rather than downsampled from
@@ -147,17 +156,25 @@ public final class BedrockWardrobeForm {
         if (equipped != null) {
             form.button(REMOVE);
             actions.add(() -> {
-                user.removeCosmeticSlot(slot);
+                Cosmetic worn = user.getCosmetic(slot);
+                if (worn != null && user.isPreviewing(worn)) user.endPreview(slot);
+                else user.removeCosmeticSlot(slot);
                 open(user);
             });
         }
 
         for (final Cosmetic cosmetic : cosmetics) {
-            button(form, cosmeticLabel(player, cosmetic, cosmetic.equals(equipped)), cosmetic, colorOf(user, cosmetic), skin);
+            button(form, cosmeticLabel(user, player, cosmetic), cosmetic, colorOf(user, cosmetic), skin);
             actions.add(() -> {
                 // Read the slot again rather than trusting the capture: the form has been on screen
                 // for a while, and a reward or a lost permission may have changed it meanwhile.
-                if (cosmetic.equals(user.getCosmetic(slot))) {
+                if (!user.canEquipCosmetic(cosmetic)) {
+                    // Not theirs: it goes on the mannequin as a preview, and the list stays open so
+                    // the next one is a tap away.
+                    if (user.canPreview()) user.togglePreview(cosmetic);
+                    openSlot(user, slot);
+                    return;
+                } else if (cosmetic.equals(user.getCosmetic(slot))) {
                     user.removeCosmeticSlot(cosmetic);
                 } else if (cosmetic.isDyeable() && BedrockDyeForm.available()) {
                     // As on Java, a dyeable cosmetic is put on through the colour it is put on in.
@@ -181,11 +198,17 @@ public final class BedrockWardrobeForm {
         return equipped == null ? slotName(slot) : slotName(slot) + '\n' + coloured(equipped);
     }
 
-    /** The name, with the badges under it: the same glyphs the chest menu draws on the item. */
+    /**
+     * The name and its state (equipped, owned, not owned or being tried on), with the badges under
+     * it: the same glyphs the chest menu draws on the item.
+     */
     @NotNull
-    private static String cosmeticLabel(@NotNull Player player, @NotNull Cosmetic cosmetic, boolean equipped) {
+    private static String cosmeticLabel(@NotNull CosmeticUser user, @NotNull Player player, @NotNull Cosmetic cosmetic) {
         StringBuilder label = new StringBuilder(coloured(cosmetic));
-        if (equipped) label.append(EQUIPPED_NOTE);
+        if (user.isPreviewing(cosmetic)) label.append(PREVIEWING_NOTE);
+        else if (cosmetic.equals(user.getCosmetic(cosmetic.getSlot()))) label.append(EQUIPPED_NOTE);
+        else if (user.canEquipCosmetic(cosmetic, true)) label.append(OWNED_NOTE);
+        else label.append(LOCKED_NOTE);
 
         String badges = cosmetic.buildBadgeLine();
         if (badges != null) label.append('\n').append(BedrockText.fromMiniMessage(player, badges));
@@ -309,12 +332,22 @@ public final class BedrockWardrobeForm {
                 .toList();
     }
 
+    /**
+     * The cosmetics of one category: the ones the player owns, then the ones the Java menus offer that
+     * they don't, which they can try on. A cosmetic no menu lists and the player doesn't own (an
+     * internal one, like the moderation outfit) stays out.
+     */
     @NotNull
     private static List<Cosmetic> cosmeticsFor(@NotNull CosmeticUser user, @NotNull CosmeticSlot slot) {
+        final Set<Cosmetic> offered = new HashSet<>();
+        for (final Menu menu : Menus.getMenu()) offered.addAll(menu.listedCosmetics());
+
         return Cosmetics.values().stream()
                 .filter(cosmetic -> slot.equals(cosmetic.getSlot()))
-                .filter(user::canEquipCosmetic)
-                .sorted(Comparator.comparing(Cosmetic::getPlainName, String.CASE_INSENSITIVE_ORDER))
+                .filter(Cosmetic::isEnabled)
+                .filter(cosmetic -> user.canEquipCosmetic(cosmetic, true) || offered.contains(cosmetic))
+                .sorted(Comparator.comparing((Cosmetic cosmetic) -> !user.canEquipCosmetic(cosmetic, true))
+                        .thenComparing(Cosmetic::getPlainName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
 
