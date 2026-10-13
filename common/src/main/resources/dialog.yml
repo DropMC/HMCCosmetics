@@ -1,0 +1,48 @@
+# The wardrobe dialog: the menu Java players get when the server also runs DropMC's commons
+# plugin. Everything the dialog cannot work out from the cosmetics themselves is declared here.
+# The file is read again whenever it changes; only the two textures below need a restart, because
+# they go into the resource pack.
+
+# The pack texture of the currency's coin, shown before every price. Blank shows bare numbers.
+currency-texture: ''
+
+# The pack texture of a rarity tag, with %s where the name goes: common, uncommon, rare, epic,
+# legendary, and also limited and dyeable. Blank shows no tags.
+tag-textures: ''
+
+# Cosmetics the dialog and the Bedrock form never list, unless the player owns them.
+hidden: []
+
+# Sets shown on the first tab, in this order.
+#   - id: an internal name.
+#   - name: what the player reads.
+#   - pieces: the ids of the cosmetics that make the set.
+sets: []
+
+# Where a cosmetic that is not sold comes from, by its id: the text shown in place of a price.
+sources: {}
+
+# What a cosmetic's page says about an origin of 'sources', by the origin's text.
+#   - description: up to two short lines.
+#   - button: the button's label. Blank shows the origin with nothing to click.
+#   - url: an address the button opens in the player's browser.
+#   - command: a command the button runs as the player, without the slash. Only without 'url'.
+source-details: {}
+
+# The text of a cosmetic that is not sold and has no origin above.
+unavailable: Indisponível
+
+# The promotional card at the top of the sets tab (filter "Todos").
+#   - pieces: up to three cosmetic ids, whose pictures show on the right.
+#   - set: the id of a set above, which the card then opens. Blank opens the sets under 'filter'.
+#   - filter: all, mine, sale or lim.
+promo:
+  enabled: false
+  title: ''
+  subtitle: ''
+  pieces: []
+  set: ''
+  filter: lim
+  colour: '#3B1D52'
+  accent: '#E0701A'
+  title-colour: '#FFB347'

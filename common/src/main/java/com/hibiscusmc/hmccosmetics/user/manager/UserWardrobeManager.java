@@ -10,6 +10,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
 import com.hibiscusmc.hmccosmetics.gui.Menu;
 import com.hibiscusmc.hmccosmetics.gui.Menus;
 import com.hibiscusmc.hmccosmetics.gui.bedrock.BedrockWardrobeForm;
+import com.hibiscusmc.hmccosmetics.gui.dialog.DialogGate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.HMCCInventoryUtils;
@@ -282,7 +283,7 @@ public class UserWardrobeManager {
                 player.showBossBar(bossBar);
             }
 
-            if (WardrobeSettings.isEnterOpenMenu() && !bedrock) {
+            if (WardrobeSettings.isEnterOpenMenu() && !bedrock && !DialogGate.open(user)) {
                 Menu menu = Menus.getDefaultMenu();
                 if (menu != null) menu.openMenu(user);
             }
@@ -345,6 +346,9 @@ public class UserWardrobeManager {
             BedrockWardrobeForm.open(user);
             return;
         }
+
+        // The dialog when this server can show one; the chest menu is what is left otherwise.
+        if (DialogGate.open(user)) return;
 
         Menu menu = lastOpenMenu != null ? lastOpenMenu : Menus.getDefaultMenu();
         if (menu != null) menu.openMenu(user);

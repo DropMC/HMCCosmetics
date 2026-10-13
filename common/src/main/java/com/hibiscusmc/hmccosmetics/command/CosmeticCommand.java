@@ -11,6 +11,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetics;
 import com.hibiscusmc.hmccosmetics.database.Database;
+import com.hibiscusmc.hmccosmetics.gui.dialog.DialogGate;
 import com.hibiscusmc.hmccosmetics.gui.Menu;
 import com.hibiscusmc.hmccosmetics.gui.Menus;
 import com.hibiscusmc.hmccosmetics.gui.special.DyeMenuProvider;
@@ -92,7 +93,20 @@ public class CosmeticCommand implements CommandExecutor {
             }
         }
 
-        // Only "/cosmeticos" and "/cosmeticos reload" are supported; every other
+        // "/cosmeticos menu" opens the wardrobe's menu where the player stands, without walking them
+        // into the wardrobe: the dialog when it can be shown, and the chest menu otherwise.
+        if (firstArgs.equals("menu") && player != null) {
+            CosmeticUser user = CosmeticUsers.getUser(player.getUniqueId());
+            if (user == null) {
+                MessagesUtil.sendMessage(sender, "invalid-player");
+            } else if (!DialogGate.open(user)) {
+                Menu menu = Menus.getDefaultMenu();
+                if (menu != null) menu.openMenu(user);
+            }
+            return true;
+        }
+
+        // Only "/cosmeticos", "/cosmeticos menu" and "/cosmeticos reload" are supported; every other
         // subcommand below is intentionally unreachable (kept, not deleted, in
         // case this is reverted later) and must behave as if it doesn't exist.
         if (!firstArgs.equals("reload")) {

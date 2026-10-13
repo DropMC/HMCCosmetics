@@ -17,6 +17,7 @@ import com.hibiscusmc.hmccosmetics.gui.special.impl.HMCColorDyeMenu;
 import com.hibiscusmc.hmccosmetics.gui.special.impl.InternalDyeMenu;
 import com.hibiscusmc.hmccosmetics.hooks.items.HookHMCCosmetics;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookBetterHud;
+import com.hibiscusmc.hmccosmetics.gui.dialog.DialogGate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookCommonsSkins;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookGrim;
@@ -137,6 +138,9 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         // The icon index is about a megabyte of JSON off Scaffolding's pack, and the first Bedrock
         // player to open the wardrobe would otherwise pay for reading it while the menu opens.
         BedrockIcons.warmUp(this);
+
+        // The wardrobe dialog's pictures have to be declared before the pack is generated.
+        DialogGate.enable(this);
 
         // Listener
         getServer().getPluginManager().registerEvents(new PlayerConnectionListener(), this);

@@ -7,8 +7,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetics;
 import com.hibiscusmc.hmccosmetics.cosmetic.Rarity;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticAuraType;
-import com.hibiscusmc.hmccosmetics.gui.Menu;
-import com.hibiscusmc.hmccosmetics.gui.Menus;
+import com.hibiscusmc.hmccosmetics.gui.dialog.DialogGate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookCommonsSkins;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.BedrockIcons;
@@ -27,11 +26,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -333,19 +330,16 @@ public final class BedrockWardrobeForm {
     }
 
     /**
-     * The cosmetics of one category: the ones the player owns, then the ones the Java menus offer that
-     * they don't, which they can try on. A cosmetic no menu lists and the player doesn't own (an
-     * internal one, like the moderation outfit) stays out.
+     * The cosmetics of one category: the ones the player owns, then the rest, which they can try on.
+     * A cosmetic {@code dialog.yml} hides and the player doesn't own (an internal one, like the
+     * moderation outfit) stays out.
      */
     @NotNull
     private static List<Cosmetic> cosmeticsFor(@NotNull CosmeticUser user, @NotNull CosmeticSlot slot) {
-        final Set<Cosmetic> offered = new HashSet<>();
-        for (final Menu menu : Menus.getMenu()) offered.addAll(menu.listedCosmetics());
-
         return Cosmetics.values().stream()
                 .filter(cosmetic -> slot.equals(cosmetic.getSlot()))
                 .filter(Cosmetic::isEnabled)
-                .filter(cosmetic -> user.canEquipCosmetic(cosmetic, true) || offered.contains(cosmetic))
+                .filter(cosmetic -> user.canEquipCosmetic(cosmetic, true) || !DialogGate.isHidden(cosmetic.getId()))
                 .sorted(Comparator.comparing((Cosmetic cosmetic) -> !user.canEquipCosmetic(cosmetic, true))
                         .thenComparing(Cosmetic::getPlainName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
