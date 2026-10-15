@@ -17,8 +17,20 @@ import java.util.OptionalInt;
  */
 public interface CosmeticMarket {
 
-    /** What {@code cosmetic} costs, or empty when it is not for sale. */
+    /**
+     * What {@code cosmetic} costs, or empty when it is not for sale. A cosmetic sold only with others
+     * (see {@link #offer(Cosmetic)}) costs what the whole offer does.
+     */
     @NotNull OptionalInt price(@NotNull Cosmetic cosmetic);
+
+    /**
+     * The purchase that sells {@code cosmetic}. Cosmetics that share one are only sold together, for
+     * the price of one of them, and buying any of them buys them all. By default each cosmetic is
+     * its own purchase.
+     */
+    default @NotNull String offer(@NotNull Cosmetic cosmetic) {
+        return cosmetic.getId();
+    }
 
     /** How much of the currency {@code player} has. */
     int balance(@NotNull Player player);

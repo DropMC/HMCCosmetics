@@ -380,7 +380,8 @@ public final class WardrobeDialog {
         screen.put(0, actions, itemButton(catalog, cosmetic, state, dye, origin));
         screen.put(SECOND_COLUMN, actions, Buttons.DARK.label("Experimentar").onClick(() -> preview(cosmetic)));
         List<Cosmetic> buyable = set == null ? List.of() : catalog.buyable(set.pieces());
-        if (buyable.size() >= 2) {
+        // A piece sold only with its set already sells the set on the main button.
+        if (buyable.size() >= 2 && !catalog.isSoldTogether(cosmetic)) {
             screen.put(0, actions + BUTTON_ROW, Buttons.GREEN
                     .content(Row.of(5, Label.of("Conjunto"), price(catalog.price(buyable), Palette.WHITE)))
                     .onClick(() -> openPurchase("Conjunto " + set.name(), set.pieces())));
@@ -408,9 +409,7 @@ public final class WardrobeDialog {
         return switch (state) {
             case EQUIPPED -> Buttons.LIGHT.label("Remover").onClick(() -> HMCCosmeticsAPI.unequipCosmetic(user, cosmetic.getSlot()));
             case OWNED -> Buttons.GREEN.label("Equipar").onClick(() -> equip(catalog, cosmetic, dye));
-            case FOR_SALE -> Buttons.GREEN
-                    .content(Row.of(5, Label.of("Comprar"), price(catalog.price(cosmetic), Palette.WHITE)))
-                    .onClick(() -> openPurchase(cosmetic.getPlainName(), List.of(cosmetic)));
+            case FOR_SALE -> buyButton(catalog, cosmetic);
             case UNAVAILABLE -> {
                 if (origin == null || !origin.hasAction()) {
                     yield Buttons.OFF.label(origin == null ? "" : origin.label());
@@ -423,6 +422,17 @@ public final class WardrobeDialog {
                         });
             }
         };
+    }
+
+    /** Buys the cosmetic, or, for one sold only with others, the whole offer it belongs to. */
+    private Element buyButton(DialogCatalog catalog, Cosmetic cosmetic) {
+        List<Cosmetic> purchase = catalog.buyable(List.of(cosmetic));
+        CosmeticSet set = catalog.setOf(cosmetic);
+        boolean isWholeSet = catalog.isSoldTogether(cosmetic);
+        String title = isWholeSet && set != null ? "Conjunto " + set.name() : cosmetic.getPlainName();
+        return Buttons.GREEN
+                .content(Row.of(5, Label.of(isWholeSet ? "Conjunto" : "Comprar"), price(catalog.price(purchase), Palette.WHITE)))
+                .onClick(() -> openPurchase(title, purchase));
     }
 
     // ==================== A set ====================

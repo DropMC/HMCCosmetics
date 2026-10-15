@@ -147,13 +147,46 @@ final class DialogCatalog {
         return priceOf(cosmetic).orElse(0);
     }
 
+    /** What buying {@code cosmetics} costs: pieces sold together are one purchase, paid once. */
     int price(@NotNull List<Cosmetic> cosmetics) {
-        return cosmetics.stream().mapToInt(this::price).sum();
+        Map<String, Integer> priceByOffer = new HashMap<>();
+        for (Cosmetic cosmetic : cosmetics) priceByOffer.putIfAbsent(offer(cosmetic), price(cosmetic));
+        return priceByOffer.values().stream().mapToInt(Integer::intValue).sum();
     }
 
-    /** The pieces of {@code cosmetics} the player lacks and can buy right now. */
+    /** Whether {@code cosmetic} is only sold together with other cosmetics, as one purchase. */
+    boolean isSoldTogether(@NotNull Cosmetic cosmetic) {
+        return soldWith(cosmetic).size() > 1;
+    }
+
+    /**
+     * The pieces of {@code cosmetics} the player lacks and can buy right now, with the pieces sold
+     * together with them: buying one of those buys them all.
+     */
     @NotNull List<Cosmetic> buyable(@NotNull List<Cosmetic> cosmetics) {
-        return cosmetics.stream().filter(cosmetic -> state(cosmetic) == State.FOR_SALE).toList();
+        List<Cosmetic> buyable = new ArrayList<>();
+        for (Cosmetic cosmetic : cosmetics) {
+            if (state(cosmetic) != State.FOR_SALE || buyable.contains(cosmetic)) continue;
+            buyable.add(cosmetic);
+            for (Cosmetic piece : soldWith(cosmetic)) {
+                if (!buyable.contains(piece) && state(piece) == State.FOR_SALE) buyable.add(piece);
+            }
+        }
+        return buyable;
+    }
+
+    private String offer(Cosmetic cosmetic) {
+        return market == null ? cosmetic.getId() : market.offer(cosmetic);
+    }
+
+    /** The listed cosmetics sold in the same purchase as {@code cosmetic}, itself included. */
+    private List<Cosmetic> soldWith(Cosmetic cosmetic) {
+        if (market == null || !cosmetic.requiresPermission()) return List.of(cosmetic);
+        String offer = market.offer(cosmetic);
+        return Cosmetics.values().stream()
+                .filter(this::isListed)
+                .filter(other -> other.requiresPermission() && market.offer(other).equals(offer))
+                .toList();
     }
 
     /**
