@@ -78,6 +78,8 @@ public class Cosmetics {
         synchronized (Cosmetics.class) {
             COSMETICS = ImmutableBiMap.of();
         }
+        // Loaded into one map and published once, so a reload does not copy the registry per cosmetic
+        Map<String, Cosmetic> loaded = new LinkedHashMap<>();
 
         File cosmeticFolder = new File(HMCCosmeticsPlugin.getInstance().getDataFolder() + "/cosmetics");
         if (!cosmeticFolder.exists()) cosmeticFolder.mkdir();
@@ -97,11 +99,14 @@ public class Cosmetics {
                     } catch (ConfigurateException e) {
                         throw new RuntimeException(e);
                     }
-                    setupCosmetics(root);
+                    setupCosmetics(root, loaded);
                 }
             });
         } catch (Exception e) {
             e.printStackTrace();
+        }
+        synchronized (Cosmetics.class) {
+            COSMETICS = ImmutableBiMap.copyOf(loaded);
         }
 
         refreshPermissions();
@@ -132,7 +137,7 @@ public class Cosmetics {
         return PROVIDER;
     }
 
-    private static void setupCosmetics(@NotNull CommentedConfigurationNode config) {
+    private static void setupCosmetics(@NotNull CommentedConfigurationNode config, @NotNull Map<String, Cosmetic> loaded) {
         for (ConfigurationNode cosmeticConfig : config.childrenMap().values()) {
             String id = cosmeticConfig.key().toString();
             MessagesUtil.sendDebugMessages("Attempting to add " + id);
@@ -149,7 +154,8 @@ public class Cosmetics {
             }
 
             try {
-                addCosmetic(PROVIDER.createCosmetic(id, cosmeticConfig, cosmeticSlot));
+                Cosmetic cosmetic = PROVIDER.createCosmetic(id, cosmeticConfig, cosmeticSlot);
+                loaded.put(cosmetic.getId(), cosmetic);
             } catch(Exception ex) {
                 log.error("Unable to construct cosmetic for {}, skipping processing it.", id, ex);
             }

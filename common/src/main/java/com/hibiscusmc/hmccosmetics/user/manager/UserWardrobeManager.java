@@ -1,6 +1,5 @@
 package com.hibiscusmc.hmccosmetics.user.manager;
 
-import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.WardrobeSettings;
 import com.hibiscusmc.hmccosmetics.config.section.Wardrobe;
 import com.hibiscusmc.hmccosmetics.config.section.WardrobeLocation;
@@ -563,7 +562,7 @@ public class UserWardrobeManager {
         Player owner = user.getPlayer();
         if (owner == null) return;
 
-        owner.getScheduler().runAtFixedRate(HMCCosmeticsPlugin.getInstance(), task -> {
+        HMCCSchedulers.timer(owner, task -> {
             Player player = user.getPlayer();
             if (!active || player == null) {
                 MessagesUtil.sendDebugMessages("WardrobeEnd[user=" + user.getUniqueId() + ",reason=Active is false]");
@@ -621,7 +620,7 @@ public class UserWardrobeManager {
             } else {
                 HMCCPacketManager.equipmentSlotUpdate(user.getPlayer(), true, viewer); // Optifine dumbassery
             }
-        }, null, 1, 2);
+        }, 2);
     }
 
     public enum WardrobeStatus {

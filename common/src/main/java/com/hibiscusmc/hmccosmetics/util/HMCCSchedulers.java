@@ -9,6 +9,8 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.function.Consumer;
+
 /**
  * Paper's region-aware schedulers, which Paper runs on its main thread and Folia on the thread that
  * owns the entity. Work on a player or an entity goes through its own scheduler: the Bukkit
@@ -47,6 +49,12 @@ public final class HMCCSchedulers {
     @Nullable
     public static ScheduledTask timer(@NotNull Entity entity, @NotNull Runnable task, long period) {
         return entity.getScheduler().runAtFixedRate(plugin(), t -> task.run(), null, 1, period);
+    }
+
+    /** {@link #timer(Entity, Runnable, long)} for a task that cancels itself. */
+    @Nullable
+    public static ScheduledTask timer(@NotNull Entity entity, @NotNull Consumer<ScheduledTask> task, long period) {
+        return entity.getScheduler().runAtFixedRate(plugin(), task, null, 1, period);
     }
 
     /** Runs {@code task} right here when this thread owns the entity, otherwise on its thread next tick. */
