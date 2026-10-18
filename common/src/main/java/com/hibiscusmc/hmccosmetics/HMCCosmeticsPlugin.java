@@ -35,6 +35,7 @@ import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.util.search.PlayerSearchManager;
 import com.hibiscusmc.hmccosmetics.util.BedrockIcons;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.TranslationUtil;
 import lombok.Getter;
@@ -161,7 +162,7 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
         // Aura glow upkeep. Editing the flag byte on its way out is seamless and makes the ticker
         // pointless, so the ticker is only there for a server without PacketEvents.
         HookPacketEvents.startGlowInterception();
-        if (!HookPacketEvents.isGlowInterceptionActive()) AuraTicker.start(this);
+        if (!HookPacketEvents.isGlowInterceptionActive()) AuraTicker.start();
 
         // Database
         new Database();
@@ -277,13 +278,15 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
 
         // Cosmetics that were just disabled shouldn't stay equipped on whoever already has them on.
         for (Player player : Bukkit.getOnlinePlayers()) {
-            CosmeticUser user = CosmeticUsers.getUser(player.getUniqueId());
-            if (user == null) continue;
-            for (Cosmetic cosmetic : user.getCosmetics()) {
-                if (cosmetic.isEnabled()) continue;
-                user.removeCosmeticSlot(cosmetic.getSlot());
-                user.updateCosmetic(cosmetic.getSlot());
-            }
+            HMCCSchedulers.owner(player, () -> {
+                CosmeticUser user = CosmeticUsers.getUser(player.getUniqueId());
+                if (user == null) return;
+                for (Cosmetic cosmetic : user.getCosmetics()) {
+                    if (cosmetic.isEnabled()) continue;
+                    user.removeCosmeticSlot(cosmetic.getSlot());
+                    user.updateCosmetic(cosmetic.getSlot());
+                }
+            });
         }
 
         getInstance().getLogger().info("Successfully Enabled HMCCosmetics");

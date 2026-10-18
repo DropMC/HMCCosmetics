@@ -1,9 +1,5 @@
 package com.hibiscusmc.hmccosmetics.user;
 
-import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-
 /**
  * Watches every aura wearer's entity flag byte and re-sends the glow the tick it changes.
  *
@@ -18,25 +14,24 @@ import org.bukkit.entity.Player;
  * the aura blinking out. Watching the byte instead of listening for a handful of events covers every
  * cause, including the ones that have no event at all (fire burning out is the common one).</p>
  *
- * <p>This runs every tick but sends nothing while a wearer's state is unchanged, so a standing player
- * costs a byte comparison and no packets.</p>
+ * <p>Each user runs it on their own scheduler (see {@link CosmeticUser#startTicking()}), every tick, but
+ * sends nothing while a wearer's state is unchanged, so a standing player costs a byte comparison and
+ * no packets.</p>
  */
-public class AuraTicker implements Runnable {
+public final class AuraTicker {
 
-    private static final long PERIOD_TICKS = 1;
+    static final long PERIOD_TICKS = 1;
 
-    public static void start(HMCCosmeticsPlugin plugin) {
-        Bukkit.getScheduler().runTaskTimer(plugin, new AuraTicker(), PERIOD_TICKS, PERIOD_TICKS);
+    private static volatile boolean enabled;
+
+    private AuraTicker() {
     }
 
-    @Override
-    public void run() {
-        // Walks the online players rather than CosmeticUsers#values, which copies its map into a new
-        // set on every call and would do so twenty times a second here.
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            CosmeticUser user = CosmeticUsers.getUser(player);
-            if (user == null) continue;
-            user.refreshAuraOnStateChange();
-        }
+    public static void start() {
+        enabled = true;
+    }
+
+    static boolean isEnabled() {
+        return enabled;
     }
 }

@@ -23,6 +23,7 @@ import com.hibiscusmc.hmccosmetics.user.manager.UserBackpackManager;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBalloonManager;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
 import com.hibiscusmc.hmccosmetics.util.HMCCInventoryUtils;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.packets.HMCCPacketManager;
 import lombok.Getter;
@@ -30,6 +31,7 @@ import lombok.Setter;
 import me.lojosho.hibiscuscommons.hooks.Hooks;
 import me.lojosho.hibiscuscommons.nms.NMSHandlers;
 import me.lojosho.hibiscuscommons.util.InventoryUtils;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -48,12 +50,12 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 public class CosmeticUser implements CosmeticHolder {
@@ -63,8 +65,10 @@ public class CosmeticUser implements CosmeticHolder {
 
     @Getter
     private final UUID uniqueId;
-    private int taskId = -1;
-    private final HashMap<CosmeticSlot, Cosmetic> playerCosmetics = new HashMap<>();
+    private @Nullable ScheduledTask tickTask;
+    private @Nullable ScheduledTask auraTask;
+    // Read by the packet threads that rewrite equipment and inventory packets
+    private final Map<CosmeticSlot, Cosmetic> playerCosmetics = new ConcurrentHashMap<>();
     private UserWardrobeManager userWardrobeManager;
     private UserBalloonManager userBalloonManager;
     @Getter @Nullable
@@ -72,7 +76,7 @@ public class CosmeticUser implements CosmeticHolder {
 
     // Cosmetic Settings/Toggles
     private final ArrayList<HiddenReason> hiddenReason = new ArrayList<>();
-    private final HashMap<CosmeticSlot, Color> colors = new HashMap<>();
+    private final Map<CosmeticSlot, Color> colors = new ConcurrentHashMap<>();
     /** What the worn outfit covered up, or null while none is worn. See {@link #wearOutfit(Collection)}. */
     private @Nullable Map<CosmeticSlot, SavedCosmetic> coveredCosmetics;
     /**
@@ -209,17 +213,21 @@ public class CosmeticUser implements CosmeticHolder {
     /**
      * Start ticking against the {@link CosmeticUser}.
      * @implNote The tick-rate is determined by the tick period specified in the configuration, if it is less-than or equal to 0
-     * there will be no {@link BukkitTask} created, and the {@link CosmeticUser#taskId} will be -1
+     * there will be no task created. Runs on the player's own scheduler, so it must be called once the player is online.
      */
     public final void startTicking() {
+        Entity entity = getEntity();
+        if (entity == null) return;
+
+        if (AuraTicker.isEnabled()) auraTask = HMCCSchedulers.timer(entity, this::refreshAuraOnStateChange, AuraTicker.PERIOD_TICKS);
+
         int tickPeriod = Settings.getTickPeriod();
         if(tickPeriod <= 0) {
             MessagesUtil.sendDebugMessages("CosmeticUser tick is disabled.");
             return;
         }
 
-        final BukkitTask task = Bukkit.getScheduler().runTaskTimer(HMCCosmeticsPlugin.getInstance(), this::tick, 0, tickPeriod);
-        this.taskId = task.getTaskId();
+        tickTask = HMCCSchedulers.timer(entity, this::tick, tickPeriod);
     }
 
     /**
@@ -262,9 +270,8 @@ public class CosmeticUser implements CosmeticHolder {
     }
 
     public void destroy() {
-        if(this.taskId != -1) { // ensure we're actually ticking this user.
-            Bukkit.getScheduler().cancelTask(taskId);
-        }
+        if (tickTask != null) tickTask.cancel();
+        if (auraTask != null) auraTask.cancel();
 
         despawnBackpack();
         despawnBalloon();
@@ -273,7 +280,7 @@ public class CosmeticUser implements CosmeticHolder {
 
     @Override
     public @Nullable Cosmetic getCosmetic(@NotNull CosmeticSlot slot) {
-        return playerCosmetics.getOrDefault(slot, null);
+        return slot == null ? null : playerCosmetics.get(slot);
     }
 
     @Override
@@ -360,7 +367,7 @@ public class CosmeticUser implements CosmeticHolder {
 
     @Override
     public boolean hasCosmeticInSlot(@NotNull CosmeticSlot slot) {
-        return playerCosmetics.containsKey(slot);
+        return slot != null && playerCosmetics.containsKey(slot);
     }
 
     public @NotNull Set<CosmeticSlot> getSlotsWithCosmetics() {
@@ -501,7 +508,7 @@ public class CosmeticUser implements CosmeticHolder {
 
     @Override
     public boolean updateCosmetic(@NotNull CosmeticSlot slot) {
-        final Cosmetic cosmetic = playerCosmetics.get(slot);
+        final Cosmetic cosmetic = slot == null ? null : playerCosmetics.get(slot);
         if(cosmetic == null) {
             return false;
         }
@@ -517,7 +524,7 @@ public class CosmeticUser implements CosmeticHolder {
 
     @Override
     public boolean updateMovementCosmetic(@NotNull CosmeticSlot slot, @NotNull final Location from, @NotNull final Location to) {
-        final Cosmetic cosmetic = playerCosmetics.get(slot);
+        final Cosmetic cosmetic = slot == null ? null : playerCosmetics.get(slot);
         if(cosmetic == null) {
             return false;
         }
@@ -755,11 +762,16 @@ public class CosmeticUser implements CosmeticHolder {
                     WardrobeSettings.getTransitionStay(),
                     WardrobeSettings.getTransitionFadeOut()
             );
-            Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> {
+            Runnable end = () -> {
                 userWardrobeManager.end();
                 userWardrobeManager = null;
                 refreshAura();
-            }, WardrobeSettings.getTransitionDelay());
+            };
+            // Gone before the transition ends: end() finds no player and only the manager is left to drop.
+            Runnable gone = () -> userWardrobeManager = null;
+            Player player = getPlayer();
+            if (player == null) gone.run();
+            else HMCCSchedulers.later(player, end, gone, WardrobeSettings.getTransitionDelay());
         } else {
             userWardrobeManager.end();
             userWardrobeManager = null;
@@ -804,7 +816,7 @@ public class CosmeticUser implements CosmeticHolder {
         org.bukkit.entity.Entity entity = getEntity();
 
         UserBalloonManager userBalloonManager1 = new UserBalloonManager(this, entity.getLocation());
-        userBalloonManager1.getModelEntity().teleport(entity.getLocation().add(cosmeticBalloonType.getBalloonOffset()));
+        HMCCSchedulers.teleport(userBalloonManager1.getModelEntity(), entity.getLocation().add(cosmeticBalloonType.getBalloonOffset()));
 
         userBalloonManager1.spawnModel(cosmeticBalloonType, getCosmeticColor(cosmeticBalloonType.getSlot()));
         userBalloonManager1.addPlayerToModel(this, cosmeticBalloonType, getCosmeticColor(cosmeticBalloonType.getSlot()));
@@ -1025,7 +1037,7 @@ public class CosmeticUser implements CosmeticHolder {
     }
 
     public Color getCosmeticColor(CosmeticSlot slot) {
-        return colors.get(slot);
+        return slot == null ? null : colors.get(slot);
     }
 
     public List<CosmeticSlot> getDyeableSlots() {

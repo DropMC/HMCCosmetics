@@ -1,6 +1,5 @@
 package com.hibiscusmc.hmccosmetics.packets;
 
-import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.Settings;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
@@ -12,6 +11,7 @@ import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBackpackManager;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
 import com.hibiscusmc.hmccosmetics.util.HMCCInventoryUtils;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.packets.HMCCPacketManager;
 import me.lojosho.hibiscuscommons.packets.PacketAction;
@@ -186,7 +186,7 @@ public class CosmeticPacketInterface implements PacketInterface {
         CosmeticSlot cosmeticSlot = HMCCInventoryUtils.NMSCosmeticSlot(slotNumber);
         if (cosmeticSlot == null || !user.hasCosmeticInSlot(cosmeticSlot)) return PacketAction.NOTHING;
 
-        Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> user.updateCosmetic(cosmeticSlot), 1);
+        HMCCSchedulers.later(player, () -> user.updateCosmetic(cosmeticSlot), 1);
         MessagesUtil.sendDebugMessages("Packet fired, updated cosmetic " + cosmeticSlot);
         return PacketAction.NOTHING;
     }

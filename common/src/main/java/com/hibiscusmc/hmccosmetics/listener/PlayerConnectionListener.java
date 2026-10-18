@@ -11,6 +11,7 @@ import com.hibiscusmc.hmccosmetics.gui.Menus;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -32,11 +33,7 @@ public class PlayerConnectionListener implements Listener {
 
         if (DatabaseSettings.isEnabledDelay()) {
             MessagesUtil.sendDebugMessages("Delay Enabled with " + DatabaseSettings.getDelayLength() + " ticks");
-            Bukkit.getScheduler().runTaskLater(
-                HMCCosmeticsPlugin.getInstance(),
-                () -> this.loadUserData(event.getPlayer()),
-                DatabaseSettings.getDelayLength()
-            );
+            HMCCSchedulers.later(event.getPlayer(), () -> this.loadUserData(event.getPlayer()), DatabaseSettings.getDelayLength());
         } else {
             this.loadUserData(event.getPlayer());
         }
@@ -50,8 +47,9 @@ public class PlayerConnectionListener implements Listener {
         Bukkit.getPluginManager().callEvent(preLoadEvent);
         if (preLoadEvent.isCancelled()) return;
 
+        // A player who quits before the data arrives never gets a user: nothing would ever remove it.
         Database.get(playerId).thenAccept(userData -> {
-            Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(), () -> {
+            HMCCSchedulers.run(player, () -> {
                 CosmeticUser cosmeticUser = CosmeticUsers.getProvider()
                     .createCosmeticUser(playerId)
                     .initialize(userData);
@@ -64,7 +62,7 @@ public class PlayerConnectionListener implements Listener {
                 Bukkit.getPluginManager().callEvent(playerLoadEvent);
 
                 // And finally, launch an update for the cosmetics they have.
-                Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> {
+                HMCCSchedulers.later(player, () -> {
                     if (cosmeticUser.getPlayer() == null) return;
                     cosmeticUser.updateCosmetic();
                 }, 4);

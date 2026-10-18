@@ -13,10 +13,10 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class PlayerMovementListener implements Listener {
@@ -26,7 +26,7 @@ public class PlayerMovementListener implements Listener {
     );
 
     // Player Id -> Small Location
-    private final Map<UUID, SmallLocation> locations = new HashMap<>();
+    private final Map<UUID, SmallLocation> locations = new ConcurrentHashMap<>();
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onPlayerMove(PlayerMoveEvent ev) {
