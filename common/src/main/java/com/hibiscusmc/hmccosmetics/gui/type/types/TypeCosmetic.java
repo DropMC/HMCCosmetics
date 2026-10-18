@@ -1,6 +1,5 @@
 package com.hibiscusmc.hmccosmetics.gui.type.types;
 
-import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.Settings;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticHolder;
@@ -10,12 +9,12 @@ import com.hibiscusmc.hmccosmetics.gui.action.Actions;
 import com.hibiscusmc.hmccosmetics.gui.special.DyeMenuProvider;
 import com.hibiscusmc.hmccosmetics.gui.type.Type;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import me.lojosho.hibiscuscommons.config.serializer.ItemSerializer;
 import me.lojosho.hibiscuscommons.hooks.Hooks;
 import me.lojosho.shaded.configurate.ConfigurationNode;
 import me.lojosho.shaded.configurate.serialize.SerializationException;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.EquipmentSlot;
@@ -132,7 +131,7 @@ public class TypeCosmetic extends Type {
         Runnable run = () -> cosmeticHolder.updateCosmetic(cosmetic.getSlot());
         if (cosmetic instanceof CosmeticArmorType) {
             if (((CosmeticArmorType) cosmetic).getEquipSlot().equals(EquipmentSlot.OFF_HAND)) {
-                Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), run, 1);
+                HMCCSchedulers.later(viewer, run, 1);
             }
         }
         run.run();

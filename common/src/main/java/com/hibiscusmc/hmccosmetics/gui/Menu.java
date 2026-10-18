@@ -1,6 +1,5 @@
 package com.hibiscusmc.hmccosmetics.gui;
 
-import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.api.events.PlayerMenuCloseEvent;
 import com.hibiscusmc.hmccosmetics.api.events.PlayerMenuOpenEvent;
 import com.hibiscusmc.hmccosmetics.config.Settings;
@@ -15,6 +14,7 @@ import com.hibiscusmc.hmccosmetics.gui.type.Types;
 import com.hibiscusmc.hmccosmetics.gui.type.types.TypeCosmetic;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import dev.triumphteam.gui.builder.item.ItemBuilder;
 import dev.triumphteam.gui.guis.Gui;
@@ -25,6 +25,7 @@ import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.datacomponent.item.DyedItemColor;
 import me.lojosho.hibiscuscommons.config.serializer.ItemSerializer;
 import me.lojosho.hibiscuscommons.hooks.Hooks;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import me.lojosho.hibiscuscommons.util.AdventureUtils;
 import me.lojosho.shaded.configurate.ConfigurationNode;
 import me.lojosho.shaded.configurate.serialize.SerializationException;
@@ -44,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.text.Collator;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 public class Menu {
@@ -337,18 +338,19 @@ public class Menu {
 
         gui.setDefaultClickAction(event -> event.setCancelled(true));
 
-        AtomicInteger taskid = new AtomicInteger(-1);
+        AtomicReference<ScheduledTask> refreshTask = new AtomicReference<>();
         gui.setOpenGuiAction(event -> {
             Runnable run = () -> {
-                if (gui.getInventory().getViewers().isEmpty() && taskid.get() != -1) {
-                    Bukkit.getScheduler().cancelTask(taskid.get());
+                ScheduledTask task = refreshTask.get();
+                if (gui.getInventory().getViewers().isEmpty() && task != null) {
+                    task.cancel();
                 }
 
                 updateMenu(viewer, cosmeticHolder, gui, state);
             };
 
             if (refreshRate != -1) {
-                taskid.set(Bukkit.getScheduler().scheduleSyncRepeatingTask(HMCCosmeticsPlugin.getInstance(), run, 0, refreshRate));
+                refreshTask.set(HMCCSchedulers.timer(viewer, run, refreshRate));
             } else {
                 run.run();
             }
@@ -357,10 +359,13 @@ public class Menu {
         gui.setCloseGuiAction(event -> {
             if (cosmeticHolder instanceof CosmeticUser user) {
                 PlayerMenuCloseEvent closeEvent = new PlayerMenuCloseEvent(user, this, event.getReason());
-                Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(), () -> Bukkit.getPluginManager().callEvent(closeEvent));
+                Runnable call = () -> Bukkit.getPluginManager().callEvent(closeEvent);
+                // Closed by quitting: still told, as it always was
+                HMCCSchedulers.later(viewer, call, call, 1);
             }
 
-            if (taskid.get() != -1) Bukkit.getScheduler().cancelTask(taskid.get());
+            ScheduledTask task = refreshTask.get();
+            if (task != null) task.cancel();
         });
 
         Runnable openGuiTask = () -> {
@@ -371,7 +376,7 @@ public class Menu {
         // API
         if (cosmeticHolder instanceof CosmeticUser user) {
             PlayerMenuOpenEvent event = new PlayerMenuOpenEvent(user, this);
-            Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(), () -> {
+            HMCCSchedulers.run(viewer, () -> {
                 Bukkit.getPluginManager().callEvent(event);
                 if (!event.isCancelled()) {
                     openGuiTask.run();
@@ -380,7 +385,7 @@ public class Menu {
         }
         // Internal
         else {
-            Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(), openGuiTask);
+            HMCCSchedulers.run(viewer, openGuiTask);
         }
     }
 

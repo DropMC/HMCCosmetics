@@ -1,6 +1,5 @@
 package com.hibiscusmc.hmccosmetics.gui.bedrock;
 
-import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.config.WardrobeSettings;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
@@ -12,9 +11,9 @@ import com.hibiscusmc.hmccosmetics.hooks.misc.HookCommonsSkins;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.BedrockIcons;
 import com.hibiscusmc.hmccosmetics.util.BedrockText;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import me.lojosho.hibiscuscommons.nms.NMSHandlers;
-import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -229,8 +228,7 @@ public final class BedrockWardrobeForm {
             then.accept(skin.join().orElse(null));
             return;
         }
-        skin.thenAccept(found -> Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(),
-                () -> then.accept(found.orElse(null))));
+        skin.thenAccept(found -> HMCCSchedulers.run(player, () -> then.accept(found.orElse(null))));
     }
 
     /**
@@ -309,7 +307,7 @@ public final class BedrockWardrobeForm {
         form.validResultHandler(response -> {
             final int clicked = response.clickedButtonId();
             // Cumulus answers on a Floodgate thread, and everything an action touches is the world.
-            Bukkit.getScheduler().runTask(HMCCosmeticsPlugin.getInstance(), () -> {
+            HMCCSchedulers.run(player, () -> {
                 if (clicked < 0 || clicked >= actions.size()) return;
                 if (!user.isInWardrobe()) return;
                 actions.get(clicked).run();

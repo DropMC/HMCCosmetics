@@ -75,7 +75,7 @@ public final class BedrockIcons {
      * JSON together, which is not something to parse on the main thread while a menu is opening.
      */
     public static void warmUp(@NotNull Plugin plugin) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> icon("nexo:warm_up", null));
+        HMCCSchedulers.async(() -> icon("nexo:warm_up", null));
     }
 
     /**

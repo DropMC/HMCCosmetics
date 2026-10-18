@@ -5,7 +5,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.database.UserData;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
-import org.bukkit.Bukkit;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -41,17 +41,20 @@ public abstract class SQLData extends Data {
     @Override
     @SuppressWarnings("resource")
     public void save(CosmeticUser user) {
+        // Read on the caller's thread, which owns the user; only the write goes async.
+        final String uuid = user.getUniqueId().toString();
+        final String cosmetics = serializeData(user);
         Runnable run = () -> {
             try (PreparedStatement preparedSt = preparedStatement("REPLACE INTO COSMETICDATABASE(UUID,COSMETICS) VALUES(?,?);")) {
-                preparedSt.setString(1, user.getUniqueId().toString());
-                preparedSt.setString(2, serializeData(user));
+                preparedSt.setString(1, uuid);
+                preparedSt.setString(2, cosmetics);
                 preparedSt.executeUpdate();
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
         };
         if (!HMCCosmeticsPlugin.getInstance().isDisabled()) {
-            Bukkit.getScheduler().runTaskAsynchronously(HMCCosmeticsPlugin.getInstance(), run);
+            HMCCSchedulers.async(run);
         } else {
             run.run();
         }
