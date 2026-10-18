@@ -12,7 +12,8 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -115,7 +116,7 @@ public class Settings {
     private static boolean nexoChangeReload;
     @Getter
     private static boolean worldGuardMoveCheck;
-    private static final HashMap<EquipmentSlot, SlotOptionConfig> slotOptions = new HashMap<>();
+    private static final Map<EquipmentSlot, SlotOptionConfig> slotOptions = new ConcurrentHashMap<>();
     @Getter
     private static boolean destroyLooseCosmetics;
     @Getter
@@ -338,8 +339,7 @@ public class Settings {
     }
 
     public static SlotOptionConfig getSlotOption(EquipmentSlot slot) {
-        if (!slotOptions.containsKey(slot)) slotOptions.put(slot, new SlotOptionConfig(slot, false, false, false, false));
-        return slotOptions.get(slot);
+        return slotOptions.computeIfAbsent(slot, s -> new SlotOptionConfig(s, false, false, false, false));
     }
 
     public static void setDebugMode(boolean newSetting) {

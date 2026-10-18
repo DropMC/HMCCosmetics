@@ -6,6 +6,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.behavior.CosmeticMovementBehavior;
 import com.hibiscusmc.hmccosmetics.cosmetic.behavior.CosmeticUpdateBehavior;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBalloonManager;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.packets.HMCCPacketManager;
 import lombok.Getter;
@@ -100,7 +101,7 @@ public class CosmeticBalloonType extends Cosmetic implements CosmeticUpdateBehav
         List<Player> viewers = HMCCPacketManager.getViewers(entity.getLocation());
 
         if (entity.getLocation().getWorld() != userBalloonManager.getLocation().getWorld()) {
-            userBalloonManager.getModelEntity().teleport(newLocation);
+            HMCCSchedulers.teleport(userBalloonManager.getModelEntity(), newLocation);
             HMCCPacketManager.sendTeleportPacket(userBalloonManager.getPufferfishBalloonId(), newLocation, false, viewers);
             return;
         }

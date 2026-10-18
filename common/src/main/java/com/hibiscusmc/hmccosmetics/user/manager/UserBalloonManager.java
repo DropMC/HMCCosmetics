@@ -5,6 +5,7 @@ import com.hibiscusmc.hmccosmetics.config.Settings;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.HMCCServerUtils;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.packets.HMCCPacketManager;
@@ -118,7 +119,8 @@ public class UserBalloonManager {
             MessagesUtil.sendDebugMessages("Balloon Model Engine Removal");
         }
 
-        modelEntity.remove();
+        // After a teleport the stand may still be in the region the player left
+        HMCCSchedulers.remove(modelEntity);
         cosmeticBalloonType = null;
         MessagesUtil.sendDebugMessages("Balloon Entity Removed");
     }
@@ -183,7 +185,7 @@ public class UserBalloonManager {
     }
 
     public void setLocation(Location location) {
-        this.getModelEntity().teleport(location);
+        HMCCSchedulers.teleport(this.getModelEntity(), location);
     }
 
     public Vector getVelocity() {

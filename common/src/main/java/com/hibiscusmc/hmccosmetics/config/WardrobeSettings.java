@@ -22,7 +22,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.stream.Stream;
@@ -114,7 +115,7 @@ public class WardrobeSettings {
     private static String bedrockApiUrl;
     @Getter
     private static GameMode exitGamemode;
-    private static final HashMap<String, Wardrobe> wardrobes = new HashMap<>();
+    private static final Map<String, Wardrobe> wardrobes = new ConcurrentHashMap<>();
     @Getter
     private static String bossbarMessage;
     @Getter

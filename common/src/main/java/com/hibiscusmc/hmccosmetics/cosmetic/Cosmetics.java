@@ -1,6 +1,6 @@
 package com.hibiscusmc.hmccosmetics.cosmetic;
 
-import com.google.common.collect.HashBiMap;
+import com.google.common.collect.ImmutableBiMap;
 import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -16,26 +16,37 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.stream.Stream;
 
 @Slf4j
 public class Cosmetics {
-    private static final HashBiMap<String, Cosmetic> COSMETICS = HashBiMap.create();
+    /**
+     * Read from every region thread and the async loads, written only by setup and the API: each write
+     * publishes a new copy, in insertion order as before.
+     */
+    private static volatile ImmutableBiMap<String, Cosmetic> COSMETICS = ImmutableBiMap.of();
 
     private static CosmeticProvider PROVIDER = CosmeticProvider.Default.INSTANCE;
 
-    public static void addCosmetic(Cosmetic cosmetic) {
-        COSMETICS.put(cosmetic.getId(), cosmetic);
+    public static synchronized void addCosmetic(Cosmetic cosmetic) {
+        Map<String, Cosmetic> copy = new LinkedHashMap<>(COSMETICS);
+        copy.put(cosmetic.getId(), cosmetic);
+        COSMETICS = ImmutableBiMap.copyOf(copy);
     }
 
-    public static void removeCosmetic(String id) {
-        COSMETICS.remove(id);
+    public static synchronized void removeCosmetic(String id) {
+        if (!COSMETICS.containsKey(id)) return;
+        Map<String, Cosmetic> copy = new LinkedHashMap<>(COSMETICS);
+        copy.remove(id);
+        COSMETICS = ImmutableBiMap.copyOf(copy);
     }
 
     public static void removeCosmetic(Cosmetic cosmetic) {
-        COSMETICS.remove(cosmetic.getId());
+        removeCosmetic(cosmetic.getId());
     }
 
     @Nullable
@@ -64,7 +75,9 @@ public class Cosmetics {
     }
 
     public static void setup() {
-        COSMETICS.clear();
+        synchronized (Cosmetics.class) {
+            COSMETICS = ImmutableBiMap.of();
+        }
 
         File cosmeticFolder = new File(HMCCosmeticsPlugin.getInstance().getDataFolder() + "/cosmetics");
         if (!cosmeticFolder.exists()) cosmeticFolder.mkdir();

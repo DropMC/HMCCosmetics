@@ -4,13 +4,14 @@ import me.lojosho.shaded.configurate.ConfigurationNode;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 
 public class TranslationUtil {
 
     // unlocked-cosmetic -> true -> True
-    private static final HashMap<@NotNull String, @NotNull List<TranslationPair>> KEYS = new HashMap<>();
+    private static final Map<@NotNull String, @NotNull List<TranslationPair>> KEYS = new ConcurrentHashMap<>();
 
     public static void setup(@NotNull ConfigurationNode config) {
         KEYS.clear();

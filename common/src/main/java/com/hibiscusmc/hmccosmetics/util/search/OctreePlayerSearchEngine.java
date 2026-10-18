@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
+// Every region thread moves its own players in and reads the others, so one lock guards the tree.
 public class OctreePlayerSearchEngine extends PlayerSearchEngine {
 
     private final Map<UUID, Octree<Player>> worldOctrees = new HashMap<>();
@@ -40,7 +41,7 @@ public class OctreePlayerSearchEngine extends PlayerSearchEngine {
         return new Octree.Point3D(location.getX(), location.getY(), location.getZ());
     }
 
-    public boolean addPlayer(Player player) {
+    public synchronized boolean addPlayer(Player player) {
         Octree<Player> octree = getOrCreateOctree(player.getWorld());
         Octree.Point3D point = toPoint3D(player.getLocation());
 
@@ -51,7 +52,7 @@ public class OctreePlayerSearchEngine extends PlayerSearchEngine {
         return false;
     }
 
-    public boolean removePlayer(Player player) {
+    public synchronized boolean removePlayer(Player player) {
         Octree<Player> octree = worldOctrees.get(player.getWorld().getUID());
         if (octree == null) return false;
 
@@ -61,13 +62,13 @@ public class OctreePlayerSearchEngine extends PlayerSearchEngine {
         return false;
     }
 
-    public void updatePlayerPosition(Player player) {
+    public synchronized void updatePlayerPosition(Player player) {
         removePlayer(player);
         addPlayer(player);
     }
 
     @Override
-    public List<Player> getPlayersInRange(Location location, double range) {
+    public synchronized List<Player> getPlayersInRange(Location location, double range) {
         Octree<Player> octree = worldOctrees.get(location.getWorld().getUID());
         if (octree == null) return Collections.emptyList();
 
@@ -81,7 +82,7 @@ public class OctreePlayerSearchEngine extends PlayerSearchEngine {
     }
 
 
-    public void clear() {
+    public synchronized void clear() {
         worldOctrees.clear();
         playerPositions.clear();
     }

@@ -19,13 +19,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.time.Duration;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 public class MessagesUtil {
 
     private static String prefix;
-    private static final HashMap<String, String> MESSAGES = new HashMap<>();
+    private static final Map<String, String> MESSAGES = new ConcurrentHashMap<>();
 
     public static void setup(@NotNull ConfigurationNode config) {
         MESSAGES.clear();
@@ -34,7 +35,8 @@ public class MessagesUtil {
         for (ConfigurationNode node : config.childrenMap().values()) {
             if (node.virtual()) continue;
             if (node.empty()) continue;
-            MESSAGES.put(node.key().toString(), node.getString());
+            String message = node.getString();
+            if (message != null) MESSAGES.put(node.key().toString(), message);
         }
      }
 
