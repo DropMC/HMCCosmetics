@@ -1070,8 +1070,14 @@ public class CosmeticUser implements CosmeticHolder {
         if (player == null) return;
         for (final Player p : Bukkit.getOnlinePlayers()) {
             if (p.equals(player)) continue;
+            // Hiding X from Y edits X's tracker, which belongs to X's thread. The wardrobe calls this every
+            // other tick, so a player elsewhere is only hopped to while they are still shown.
             p.hidePlayer(HMCCosmeticsPlugin.getInstance(), player);
-            player.hidePlayer(HMCCosmeticsPlugin.getInstance(), p);
+            if (Bukkit.isOwnedByCurrentRegion(p)) {
+                player.hidePlayer(HMCCosmeticsPlugin.getInstance(), p);
+            } else if (player.canSee(p)) {
+                HMCCSchedulers.run(p, () -> player.hidePlayer(HMCCosmeticsPlugin.getInstance(), p));
+            }
 
             // hidePlayer() also drops both from each other's tab list on this server; only the
             // in-world model should disappear, so re-send their tab entries right after hiding.
@@ -1085,7 +1091,7 @@ public class CosmeticUser implements CosmeticHolder {
         if (player == null) return;
         for (final Player p : Bukkit.getOnlinePlayers()) {
             p.showPlayer(HMCCosmeticsPlugin.getInstance(), player);
-            player.showPlayer(HMCCosmeticsPlugin.getInstance(), p);
+            HMCCSchedulers.owner(p, () -> player.showPlayer(HMCCosmeticsPlugin.getInstance(), p));
         }
     }
 
