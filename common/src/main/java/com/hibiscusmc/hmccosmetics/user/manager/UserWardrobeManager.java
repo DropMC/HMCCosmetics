@@ -14,6 +14,7 @@ import com.hibiscusmc.hmccosmetics.gui.dialog.DialogGate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.util.HMCCInventoryUtils;
+import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.HMCCServerUtils;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.packets.HMCCPacketManager;
@@ -34,7 +35,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -120,6 +120,12 @@ public class UserWardrobeManager {
     /** Flight the player walked in with, recorded in {@link #start()} and given back in {@link #end()}. */
     private boolean previousAllowFlight;
     private boolean previousFlying;
+    /**
+     * Set when the player leaves the wardrobe because they leave the server (quit, shutdown), where
+     * the exit teleport can only wait for their next join on Folia.
+     */
+    @Setter
+    private boolean leavingServer;
     /** Whether jump was already down on the previous input, so holding it does not reopen the menu. */
     @Getter
     @Setter
@@ -179,9 +185,6 @@ public class UserWardrobeManager {
 
         user.hidePlayer();
         if (!Bukkit.getServer().getAllowFlight()) player.setAllowFlight(true);
-        List<Player> viewer = Collections.singletonList(player);
-        List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);
-        outsideViewers.remove(player);
 
         Runnable run = () -> {
             if (!player.isOnline()) {
@@ -210,93 +213,7 @@ public class UserWardrobeManager {
             }
 
             // Player
-            player.teleport(viewingLocation, PlayerTeleportEvent.TeleportCause.PLUGIN);
-            player.setInvisible(true);
-            if (!bedrock) extendReachToMannequin(player);
-            // Bedrock is told adventure instead of spectator. Geyser refuses to forward the swing of
-            // any session it believes is in spectator (BedrockAnimateTranslator), and that swing is
-            // the punch that opens the menu, so spectator would leave the player staring at a
-            // mannequin with no way in. Nothing else is lost by it: the camera below is what holds
-            // the player still, and an adventure client sends no block breaks while the server still
-            // has them in survival.
-            viewerPackets.add(packetBuilder.buildPlayerGamemodeChangePacket(bedrock ? GameMode.ADVENTURE : GameMode.SPECTATOR));
-            viewerPackets.add(packetBuilder.buildEntityCameraPacket(ARMORSTAND_ID));
-
-            // NPC
-            npcName = "Mannequin";
-            if (npcName.length() >= 16) {
-                npcName = npcName.substring(0, 15);
-            }
-            viewerPackets.add(packetBuilder.buildPlayerInfoAddPacket(player, NPC_ID, WARDROBE_UUID, npcName));
-            viewerPackets.add(packetBuilder.buildEntitySpawnPacket(NPC_ID, WARDROBE_UUID, EntityType.PLAYER, npcLocation));
-            viewerPackets.add(packetBuilder.buildEntityMetadataPacket(NPC_ID, HMCCPacketManager.getPlayerOverlayMetaData()));
-            viewerPackets.add(packetBuilder.buildPlayerScoreboardRemovePacket(player, npcName));
-            viewerPackets.add(packetBuilder.buildPlayerScoreboardCreatePacket(player, npcName));
-            viewerPackets.add(packetBuilder.buildPlayerScoreboardAddPlayersPacket(player, npcName));
-            AttributeInstance scaleAttribute = user.getPlayer().getAttribute(Attribute.SCALE);
-            if (scaleAttribute != null) {
-                viewerPackets.add(packetBuilder.buildEntityAttributePacket(NPC_ID, Attribute.SCALE, scaleAttribute.getValue()));
-            }
-
-            // Location
-            viewerPackets.add(packetBuilder.buildEntityRotateHeadPacket(NPC_ID, npcLocation));
-            viewerPackets.add(packetBuilder.buildEntityRotatePacket(NPC_ID, npcLocation, true));
-
-            // Misc
-            if (user.hasCosmeticInSlot(CosmeticSlot.BACKPACK)) {
-                // Maybe null as backpack maybe despawned before entering
-                if (user.getUserBackpackManager() == null) user.respawnBackpack();
-                if (user.isBackpackSpawned()) {
-                    user.getUserBackpackManager().getEntityManager().teleport(npcLocation.clone().add(0, 2, 0));
-
-                    viewerPackets.add(packetBuilder.buildEntityEquipmentSlotUpdatePacket(user.getUserBackpackManager().getFirstArmorStandId(), Map.of(EquipmentSlot.HEAD, user.getUserCosmeticItem(user.getCosmetic(CosmeticSlot.BACKPACK)))));
-                    viewerPackets.add(packetBuilder.buildEntityMountPacket(NPC_ID, new int[]{user.getUserBackpackManager().getFirstArmorStandId()}));
-                }
-            }
-
-            packetSender.sendBundle(viewerPackets, viewer);
-
-            if (bedrock) holdBedrockPlayerInPlace(player);
-
-            if (user.hasCosmeticInSlot(CosmeticSlot.BALLOON)) {
-                if (user.getBalloonManager() == null) user.respawnBalloon();
-                if (user.isBalloonSpawned()) {
-                    CosmeticBalloonType cosmetic = (CosmeticBalloonType) user.getCosmetic(CosmeticSlot.BALLOON);
-                    user.getBalloonManager().sendRemoveLeashPacket(viewer);
-                    user.getBalloonManager().sendLeashPacket(NPC_ID);
-                    //PacketManager.sendLeashPacket(VIEWER.getBalloonEntity().getModelId(), NPC_ID, viewer);
-
-                    Location balloonLocation = npcLocation.clone().add(cosmetic.getBalloonOffset());
-                    HMCCPacketManager.sendTeleportPacket(user.getBalloonManager().getPufferfishBalloonId(), balloonLocation, false, viewer);
-                    user.getBalloonManager().getModelEntity().teleport(balloonLocation);
-                    user.getBalloonManager().setLocation(balloonLocation);
-                }
-            }
-
-            if (WardrobeSettings.isEnabledBossbar()) {
-                float progress = WardrobeSettings.getBossbarProgress();
-                Component message = MessagesUtil.processStringNoKey(player, WardrobeSettings.getBossbarMessage());
-
-                bossBar = BossBar.bossBar(message, progress, WardrobeSettings.getBossbarColor(), WardrobeSettings.getBossbarOverlay());
-                //Audience target = BukkitAudiences.create(HMCCosmeticsPlugin.getInstance()).player(player);
-
-                player.showBossBar(bossBar);
-            }
-
-            if (WardrobeSettings.isEnterOpenMenu() && !bedrock && !DialogGate.open(user)) {
-                Menu menu = Menus.getDefaultMenu();
-                if (menu != null) menu.openMenu(user);
-            }
-
-            this.active = true;
-            update();
-            setWardrobeStatus(WardrobeStatus.RUNNING);
-            // Bedrock is always handed the menu on arrival, whatever enter-open-menu says: the
-            // control that reopens it is a jump, which is not a control anyone would guess at.
-            if (bedrock) openWardrobeMenu();
-            // The aura is drawn on whichever entity the wearer is looking at, which just became the
-            // mannequin. Without this the preview only appears on the next user tick.
-            user.refreshAura();
+            HMCCSchedulers.teleport(player, viewingLocation, PlayerTeleportEvent.TeleportCause.PLUGIN, () -> enter(player, viewerPackets));
         };
 
 
@@ -308,13 +225,106 @@ public class UserWardrobeManager {
                     WardrobeSettings.getTransitionStay(),
                     WardrobeSettings.getTransitionFadeOut()
             );
-            Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), run, WardrobeSettings.getTransitionDelay());
+            // Quitting before the transition ends finds no player in end(), as it always did.
+            HMCCSchedulers.later(player, run, () -> setWardrobeStatus(WardrobeStatus.STOPPING), WardrobeSettings.getTransitionDelay());
         } else {
             run.run();
         }
 
     }
 
+    /** The rest of {@link #start()}, run once the player stands at the viewing location. */
+    private void enter(@NotNull Player player, @NotNull List<PacketWrapper> viewerPackets) {
+        if (!player.isOnline()) return;
+
+        List<Player> viewer = Collections.singletonList(player);
+        player.setInvisible(true);
+        if (!bedrock) extendReachToMannequin(player);
+        // Bedrock is told adventure instead of spectator. Geyser refuses to forward the swing of
+        // any session it believes is in spectator (BedrockAnimateTranslator), and that swing is
+        // the punch that opens the menu, so spectator would leave the player staring at a
+        // mannequin with no way in. Nothing else is lost by it: the camera below is what holds
+        // the player still, and an adventure client sends no block breaks while the server still
+        // has them in survival.
+        viewerPackets.add(packetBuilder.buildPlayerGamemodeChangePacket(bedrock ? GameMode.ADVENTURE : GameMode.SPECTATOR));
+        viewerPackets.add(packetBuilder.buildEntityCameraPacket(ARMORSTAND_ID));
+
+        // NPC
+        npcName = "Mannequin";
+        if (npcName.length() >= 16) {
+            npcName = npcName.substring(0, 15);
+        }
+        viewerPackets.add(packetBuilder.buildPlayerInfoAddPacket(player, NPC_ID, WARDROBE_UUID, npcName));
+        viewerPackets.add(packetBuilder.buildEntitySpawnPacket(NPC_ID, WARDROBE_UUID, EntityType.PLAYER, npcLocation));
+        viewerPackets.add(packetBuilder.buildEntityMetadataPacket(NPC_ID, HMCCPacketManager.getPlayerOverlayMetaData()));
+        viewerPackets.add(packetBuilder.buildPlayerScoreboardRemovePacket(player, npcName));
+        viewerPackets.add(packetBuilder.buildPlayerScoreboardCreatePacket(player, npcName));
+        viewerPackets.add(packetBuilder.buildPlayerScoreboardAddPlayersPacket(player, npcName));
+        AttributeInstance scaleAttribute = user.getPlayer().getAttribute(Attribute.SCALE);
+        if (scaleAttribute != null) {
+            viewerPackets.add(packetBuilder.buildEntityAttributePacket(NPC_ID, Attribute.SCALE, scaleAttribute.getValue()));
+        }
+
+        // Location
+        viewerPackets.add(packetBuilder.buildEntityRotateHeadPacket(NPC_ID, npcLocation));
+        viewerPackets.add(packetBuilder.buildEntityRotatePacket(NPC_ID, npcLocation, true));
+
+        // Misc
+        if (user.hasCosmeticInSlot(CosmeticSlot.BACKPACK)) {
+            // Maybe null as backpack maybe despawned before entering
+            if (user.getUserBackpackManager() == null) user.respawnBackpack();
+            if (user.isBackpackSpawned()) {
+                user.getUserBackpackManager().getEntityManager().teleport(npcLocation.clone().add(0, 2, 0));
+
+                viewerPackets.add(packetBuilder.buildEntityEquipmentSlotUpdatePacket(user.getUserBackpackManager().getFirstArmorStandId(), Map.of(EquipmentSlot.HEAD, user.getUserCosmeticItem(user.getCosmetic(CosmeticSlot.BACKPACK)))));
+                viewerPackets.add(packetBuilder.buildEntityMountPacket(NPC_ID, new int[]{user.getUserBackpackManager().getFirstArmorStandId()}));
+            }
+        }
+
+        packetSender.sendBundle(viewerPackets, viewer);
+
+        if (bedrock) holdBedrockPlayerInPlace(player);
+
+        if (user.hasCosmeticInSlot(CosmeticSlot.BALLOON)) {
+            if (user.getBalloonManager() == null) user.respawnBalloon();
+            if (user.isBalloonSpawned()) {
+                CosmeticBalloonType cosmetic = (CosmeticBalloonType) user.getCosmetic(CosmeticSlot.BALLOON);
+                user.getBalloonManager().sendRemoveLeashPacket(viewer);
+                user.getBalloonManager().sendLeashPacket(NPC_ID);
+                //PacketManager.sendLeashPacket(VIEWER.getBalloonEntity().getModelId(), NPC_ID, viewer);
+
+                Location balloonLocation = npcLocation.clone().add(cosmetic.getBalloonOffset());
+                HMCCPacketManager.sendTeleportPacket(user.getBalloonManager().getPufferfishBalloonId(), balloonLocation, false, viewer);
+                HMCCSchedulers.teleport(user.getBalloonManager().getModelEntity(), balloonLocation);
+                user.getBalloonManager().setLocation(balloonLocation);
+            }
+        }
+
+        if (WardrobeSettings.isEnabledBossbar()) {
+            float progress = WardrobeSettings.getBossbarProgress();
+            Component message = MessagesUtil.processStringNoKey(player, WardrobeSettings.getBossbarMessage());
+
+            bossBar = BossBar.bossBar(message, progress, WardrobeSettings.getBossbarColor(), WardrobeSettings.getBossbarOverlay());
+            //Audience target = BukkitAudiences.create(HMCCosmeticsPlugin.getInstance()).player(player);
+
+            player.showBossBar(bossBar);
+        }
+
+        if (WardrobeSettings.isEnterOpenMenu() && !bedrock && !DialogGate.open(user)) {
+            Menu menu = Menus.getDefaultMenu();
+            if (menu != null) menu.openMenu(user);
+        }
+
+        this.active = true;
+        update();
+        setWardrobeStatus(WardrobeStatus.RUNNING);
+        // Bedrock is always handed the menu on arrival, whatever enter-open-menu says: the
+        // control that reopens it is a jump, which is not a control anyone would guess at.
+        if (bedrock) openWardrobeMenu();
+        // The aura is drawn on whichever entity the wearer is looking at, which just became the
+        // mannequin. Without this the preview only appears on the next user tick.
+        user.refreshAura();
+    }
     /**
      * Puts a Bedrock player's camera back on the anchor, in first person.
      * <p>
@@ -444,8 +454,6 @@ public class UserWardrobeManager {
         Player player = user.getPlayer();
 
         List<Player> viewer = Collections.singletonList(player);
-        List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);
-        outsideViewers.remove(player);
 
         if (player == null) return;
         if (bedrock) {
@@ -504,110 +512,116 @@ public class UserWardrobeManager {
                 //PacketManager.sendLeashPacket(VIEWER.getBalloonEntity().getPufferfishBalloonId(), player.getEntityId(), viewer);
             }
 
-            player.teleport(Objects.requireNonNullElseGet(exitLocation, () -> player.getWorld().getSpawnLocation()), PlayerTeleportEvent.TeleportCause.PLUGIN);
-
-            HashMap<EquipmentSlot, ItemStack> items = new HashMap<>();
-            for (EquipmentSlot slot : HMCCInventoryUtils.getPlayerArmorSlots()) {
-                ItemStack item = player.getInventory().getItem(slot);
-                items.put(slot, item);
+            Location exit = Objects.requireNonNullElseGet(exitLocation, () -> player.getWorld().getSpawnLocation());
+            if (leavingServer && HMCCSchedulers.REGIONIZED) {
+                // Folia cannot move a player who is on the way out, so their next join does it
+                WardrobeExit.remember(player, exit);
+                return;
             }
-            /*
-            if (WardrobeSettings.isEquipPumpkin()) {
-                items.put(EquipmentSlot.HEAD, player.getInventory().getHelmet());
-            }
-             */
-            packetBuilder.buildEntityEquipmentSlotUpdatePacket(player.getEntityId(), items).sendPacket(viewer);
-
-            if (WardrobeSettings.isEnabledBossbar()) {
-                //Audience target = BukkitAudiences.create(HMCCosmeticsPlugin.getInstance()).player(player);
-                player.hideBossBar(bossBar);
-            }
-
-            // The controls hint would otherwise sit on screen for its own fade after the player is
-            // already back outside, where neither control does anything.
-            player.sendActionBar(Component.empty());
-
-            user.updateCosmetic();
-
-            // A Bedrock client rebuilds the player's own hands from its own inventory once the
-            // wardrobe's screens are gone, which drops what the line above just drew over them. One
-            // more pass, late enough to land after that, is what makes a cosmetic picked in here
-            // show up without the player having to go and click something in their inventory.
-            if (bedrock) {
-                Bukkit.getScheduler().runTaskLater(
-                        HMCCosmeticsPlugin.getInstance(), () -> user.updateCosmetic(), BEDROCK_RESYNC_DELAY);
-            }
+            HMCCSchedulers.teleport(player, exit, PlayerTeleportEvent.TeleportCause.PLUGIN, () -> left(player, viewer));
         };
         run.run();
+    }
+
+    /** The rest of {@link #end()}, run once the player stands at the exit. */
+    private void left(@NotNull Player player, @NotNull List<Player> viewer) {
+        HashMap<EquipmentSlot, ItemStack> items = new HashMap<>();
+        for (EquipmentSlot slot : HMCCInventoryUtils.getPlayerArmorSlots()) {
+            ItemStack item = player.getInventory().getItem(slot);
+            items.put(slot, item);
+        }
+        /*
+        if (WardrobeSettings.isEquipPumpkin()) {
+            items.put(EquipmentSlot.HEAD, player.getInventory().getHelmet());
+        }
+         */
+        packetBuilder.buildEntityEquipmentSlotUpdatePacket(player.getEntityId(), items).sendPacket(viewer);
+
+        if (WardrobeSettings.isEnabledBossbar()) {
+            //Audience target = BukkitAudiences.create(HMCCosmeticsPlugin.getInstance()).player(player);
+            player.hideBossBar(bossBar);
+        }
+
+        // The controls hint would otherwise sit on screen for its own fade after the player is
+        // already back outside, where neither control does anything.
+        player.sendActionBar(Component.empty());
+
+        user.updateCosmetic();
+
+        // A Bedrock client rebuilds the player's own hands from its own inventory once the
+        // wardrobe's screens are gone, which drops what the line above just drew over them. One
+        // more pass, late enough to land after that, is what makes a cosmetic picked in here
+        // show up without the player having to go and click something in their inventory.
+        if (bedrock) {
+            HMCCSchedulers.later(player, () -> user.updateCosmetic(), BEDROCK_RESYNC_DELAY);
+        }
     }
 
     private void update() {
         final AtomicInteger data = new AtomicInteger();
 
-        BukkitRunnable runnable = new BukkitRunnable() {
-            @Override
-            public void run() {
-                Player player = user.getPlayer();
-                if (!active || player == null) {
-                    MessagesUtil.sendDebugMessages("WardrobeEnd[user=" + user.getUniqueId() + ",reason=Active is false]");
-                    this.cancel();
-                    return;
-                }
-                MessagesUtil.sendDebugMessages("WardrobeUpdate[user=" + user.getUniqueId() + ",status=" + getWardrobeStatus() + "]");
+        Player owner = user.getPlayer();
+        if (owner == null) return;
 
-                // Neither control is discoverable, so the hint stays up for the whole session instead of
-                // flashing once on entry. Resent every run because the action bar fades on its own, and so
-                // it comes back by itself once a menu stops covering the HUD.
-                MessagesUtil.sendActionBar(player, bedrock ? "wardrobe-controls-bedrock" : "wardrobe-controls");
-
-                List<Player> viewer = Collections.singletonList(player);
-                List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);
-                outsideViewers.remove(player);
-
-                Location location = npcLocation;
-                int yaw = data.get();
-                location.setYaw(yaw);
-
-                HMCCPacketManager.sendRotateHeadPacket(NPC_ID, location, viewer);
-                user.hidePlayer();
-                int rotationSpeed = WardrobeSettings.getRotationSpeed();
-                int newYaw = HMCCServerUtils.getNextYaw(yaw - 30, rotationSpeed);
-                location.setYaw(newYaw);
-                packetBuilder.buildEntityRotatePacket(NPC_ID, newYaw, 0, false).sendPacket(viewer);
-                int nextyaw = HMCCServerUtils.getNextYaw(yaw, rotationSpeed);
-                data.set(nextyaw);
-
-                for (CosmeticSlot slot : CosmeticSlot.values().values()) {
-                    HMCCPacketManager.equipmentSlotUpdate(NPC_ID, user, slot, viewer);
-                }
-
-                if (user.hasCosmeticInSlot(CosmeticSlot.BACKPACK) && user.getUserBackpackManager() != null) {
-                    HMCCPacketManager.sendTeleportPacket(user.getUserBackpackManager().getFirstArmorStandId(), location, false, viewer);
-                    packetBuilder.buildEntityMountPacket(NPC_ID, new int[]{user.getUserBackpackManager().getFirstArmorStandId()}).sendPacket(viewer);
-                    user.getUserBackpackManager().getEntityManager().setRotation(nextyaw);
-                    HMCCPacketManager.sendEntityDestroyPacket(user.getUserBackpackManager().getFirstArmorStandId(), outsideViewers);
-                }
-
-                if (user.hasCosmeticInSlot(CosmeticSlot.BALLOON) && user.isBalloonSpawned()) {
-                    // The two lines below broke, solved by listening to PlayerCosmeticPostEquipEvent
-                    //PacketManager.sendTeleportPacket(user.getBalloonManager().getPufferfishBalloonId(), npcLocation.add(Settings.getBalloonOffset()), false, viewer);
-                    //user.getBalloonManager().getModelEntity().teleport(npcLocation.add(Settings.getBalloonOffset()));
-                    user.getBalloonManager().sendRemoveLeashPacket(outsideViewers);
-                    if (user.getBalloonManager().getBalloonType() != UserBalloonManager.BalloonType.MODELENGINE) {
-                        HMCCPacketManager.sendEntityDestroyPacket(user.getBalloonManager().getModelId(), outsideViewers);
-                    }
-                    user.getBalloonManager().sendLeashPacket(NPC_ID);
-                }
-
-                if (WardrobeSettings.isEquipPumpkin()) {
-                    HMCCPacketManager.equipmentSlotUpdate(user.getPlayer().getEntityId(), EquipmentSlot.HEAD, new ItemStack(Material.CARVED_PUMPKIN), viewer);
-                } else {
-                    HMCCPacketManager.equipmentSlotUpdate(user.getPlayer(), true, viewer); // Optifine dumbassery
-                }
+        owner.getScheduler().runAtFixedRate(HMCCosmeticsPlugin.getInstance(), task -> {
+            Player player = user.getPlayer();
+            if (!active || player == null) {
+                MessagesUtil.sendDebugMessages("WardrobeEnd[user=" + user.getUniqueId() + ",reason=Active is false]");
+                task.cancel();
+                return;
             }
-        };
+            MessagesUtil.sendDebugMessages("WardrobeUpdate[user=" + user.getUniqueId() + ",status=" + getWardrobeStatus() + "]");
 
-        runnable.runTaskTimer(HMCCosmeticsPlugin.getInstance(), 0, 2);
+            // Neither control is discoverable, so the hint stays up for the whole session instead of
+            // flashing once on entry. Resent every run because the action bar fades on its own, and so
+            // it comes back by itself once a menu stops covering the HUD.
+            MessagesUtil.sendActionBar(player, bedrock ? "wardrobe-controls-bedrock" : "wardrobe-controls");
+
+            List<Player> viewer = Collections.singletonList(player);
+            List<Player> outsideViewers = HMCCPacketManager.getViewers(viewingLocation);
+            outsideViewers.remove(player);
+
+            Location location = npcLocation;
+            int yaw = data.get();
+            location.setYaw(yaw);
+
+            HMCCPacketManager.sendRotateHeadPacket(NPC_ID, location, viewer);
+            user.hidePlayer();
+            int rotationSpeed = WardrobeSettings.getRotationSpeed();
+            int newYaw = HMCCServerUtils.getNextYaw(yaw - 30, rotationSpeed);
+            location.setYaw(newYaw);
+            packetBuilder.buildEntityRotatePacket(NPC_ID, newYaw, 0, false).sendPacket(viewer);
+            int nextyaw = HMCCServerUtils.getNextYaw(yaw, rotationSpeed);
+            data.set(nextyaw);
+
+            for (CosmeticSlot slot : CosmeticSlot.values().values()) {
+                HMCCPacketManager.equipmentSlotUpdate(NPC_ID, user, slot, viewer);
+            }
+
+            if (user.hasCosmeticInSlot(CosmeticSlot.BACKPACK) && user.getUserBackpackManager() != null) {
+                HMCCPacketManager.sendTeleportPacket(user.getUserBackpackManager().getFirstArmorStandId(), location, false, viewer);
+                packetBuilder.buildEntityMountPacket(NPC_ID, new int[]{user.getUserBackpackManager().getFirstArmorStandId()}).sendPacket(viewer);
+                user.getUserBackpackManager().getEntityManager().setRotation(nextyaw);
+                HMCCPacketManager.sendEntityDestroyPacket(user.getUserBackpackManager().getFirstArmorStandId(), outsideViewers);
+            }
+
+            if (user.hasCosmeticInSlot(CosmeticSlot.BALLOON) && user.isBalloonSpawned()) {
+                // The two lines below broke, solved by listening to PlayerCosmeticPostEquipEvent
+                //PacketManager.sendTeleportPacket(user.getBalloonManager().getPufferfishBalloonId(), npcLocation.add(Settings.getBalloonOffset()), false, viewer);
+                //user.getBalloonManager().getModelEntity().teleport(npcLocation.add(Settings.getBalloonOffset()));
+                user.getBalloonManager().sendRemoveLeashPacket(outsideViewers);
+                if (user.getBalloonManager().getBalloonType() != UserBalloonManager.BalloonType.MODELENGINE) {
+                    HMCCPacketManager.sendEntityDestroyPacket(user.getBalloonManager().getModelId(), outsideViewers);
+                }
+                user.getBalloonManager().sendLeashPacket(NPC_ID);
+            }
+
+            if (WardrobeSettings.isEquipPumpkin()) {
+                HMCCPacketManager.equipmentSlotUpdate(user.getPlayer().getEntityId(), EquipmentSlot.HEAD, new ItemStack(Material.CARVED_PUMPKIN), viewer);
+            } else {
+                HMCCPacketManager.equipmentSlotUpdate(user.getPlayer(), true, viewer); // Optifine dumbassery
+            }
+        }, null, 1, 2);
     }
 
     public enum WardrobeStatus {

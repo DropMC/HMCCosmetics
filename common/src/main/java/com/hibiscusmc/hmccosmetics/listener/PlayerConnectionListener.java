@@ -11,6 +11,7 @@ import com.hibiscusmc.hmccosmetics.gui.Menus;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUsers;
 import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
+import com.hibiscusmc.hmccosmetics.user.manager.WardrobeExit;
 import com.hibiscusmc.hmccosmetics.util.HMCCSchedulers;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import org.bukkit.Bukkit;
@@ -30,6 +31,7 @@ public class PlayerConnectionListener implements Listener {
         // Nothing should be carrying the wardrobe's reach out here. It survives a server that went
         // down mid session, because attribute modifiers are saved with the player.
         UserWardrobeManager.clearWardrobeReach(event.getPlayer());
+        WardrobeExit.restore(event.getPlayer());
 
         if (DatabaseSettings.isEnabledDelay()) {
             MessagesUtil.sendDebugMessages("Delay Enabled with " + DatabaseSettings.getDelayLength() + " ticks");
@@ -86,6 +88,7 @@ public class PlayerConnectionListener implements Listener {
         Bukkit.getPluginManager().callEvent(playerUnloadEvent);
 
         if (user.isInWardrobe()) {
+            user.getWardrobeManager().setLeavingServer(true);
             user.leaveWardrobe(true);
 
             final Player player = user.getPlayer();

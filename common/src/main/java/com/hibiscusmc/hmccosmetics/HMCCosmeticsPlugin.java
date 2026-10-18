@@ -202,6 +202,7 @@ public final class HMCCosmeticsPlugin extends HibiscusPlugin {
             CosmeticUser user = CosmeticUsers.getUser(player);
             if (user == null) continue;
             if (user.isInWardrobe()) {
+                user.getWardrobeManager().setLeavingServer(true);
                 user.leaveWardrobe(true);
             }
             Database.save(user);
