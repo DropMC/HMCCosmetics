@@ -47,7 +47,6 @@ public class WardrobeSettings {
     private static final String RETURN_LAST_LOCATION = "return-last-location";
     private static final String DAMAGE_KICK_PATH = "damage-kicked";
     private static final String PREVENT_DAMAGE_PATH = "prevent-damage";
-    private static final String BEDROCK_API_URL_PATH = "bedrock-api-url";
 
     private static final String WARDROBE_MENU_OPTIONS = "menu-options";
     private static final String WARDROBE_ENTER_OPEN_MENU_PATH = "enter-open-menu";
@@ -106,13 +105,6 @@ public class WardrobeSettings {
     private static boolean damagedKicked;
     @Getter
     private static boolean preventDamage;
-    /**
-     * The base of the network API's Bedrock routes, where a form button gets an image the client
-     * cannot draw itself: {@code <url>/icons/<icon>/<rrggbb>.png} for a dyed icon and
-     * {@code <url>/auras/<texture>/<model>/<rrggbb>.png} for an aura. Empty when none.
-     */
-    @Getter
-    private static String bedrockApiUrl;
     @Getter
     private static GameMode exitGamemode;
     private static final Map<String, Wardrobe> wardrobes = new ConcurrentHashMap<>();
@@ -150,7 +142,6 @@ public class WardrobeSettings {
         tryCosmeticsInWardrobe = source.node(TRY_COSMETICS_WARDROBE).getBoolean(false);
         damagedKicked = source.node(DAMAGE_KICK_PATH).getBoolean(false);
         preventDamage = source.node(PREVENT_DAMAGE_PATH).getBoolean(true);
-        bedrockApiUrl = source.node(BEDROCK_API_URL_PATH).getString("").replaceAll("/+$", "");
 
         ConfigurationNode menuOptionsNode = source.node(WARDROBE_MENU_OPTIONS);
         enterOpenMenu = menuOptionsNode.node(WARDROBE_ENTER_OPEN_MENU_PATH).getBoolean(false);
