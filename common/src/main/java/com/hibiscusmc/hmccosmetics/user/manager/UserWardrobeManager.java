@@ -351,7 +351,7 @@ public class UserWardrobeManager {
      * </p>
      */
     public void openWardrobeMenu() {
-        if (bedrock) {
+        if (HookFloodgate.getsBedrockForms(user.getPlayer())) {
             BedrockWardrobeForm.open(user);
             return;
         }

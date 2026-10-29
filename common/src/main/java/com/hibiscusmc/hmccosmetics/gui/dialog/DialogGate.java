@@ -72,10 +72,11 @@ public final class DialogGate {
      * Opens the dialog for {@code user}.
      *
      * @return false when it was not shown and the caller has to open something else: a Bedrock
-     *         client cannot draw it, and neither can anyone before the pack is generated
+     *         client without the core's {@code java-dialogs} gets its own form, and nobody can draw it
+     *         before the pack is generated
      */
     public static boolean open(@NotNull CosmeticUser user) {
-        if (!isEnabled || HookFloodgate.isBedrockPlayer(user.getPlayer())) return false;
+        if (!isEnabled || HookFloodgate.getsBedrockForms(user.getPlayer())) return false;
         return WardrobeDialog.open(user);
     }
 
