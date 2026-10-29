@@ -4,6 +4,7 @@ import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import me.lojosho.hibiscuscommons.hooks.Hook;
 import org.bukkit.entity.Player;
 import org.geysermc.floodgate.api.FloodgateApi;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -40,6 +41,30 @@ public class HookFloodgate extends Hook {
         } catch (Throwable t) {
             MessagesUtil.sendDebugMessages("Floodgate is present but could not be asked about "
                     + player.getName() + ": " + t);
+            return false;
+        }
+    }
+
+    /**
+     * Whether this player gets the wardrobe's own Bedrock forms: a Bedrock player, unless the survival
+     * core's {@code java-dialogs} is on, in which case the proxy's EnhancedBedrock draws the Java
+     * dialog for them. The core is asked by reflection, since this plugin does not build against it;
+     * without it the forms stay.
+     */
+    public static boolean getsBedrockForms(@Nullable Player player) {
+        return isBedrockPlayer(player) && !coreJavaDialogs(player);
+    }
+
+    private static boolean coreJavaDialogs(@NotNull Player player) {
+        try {
+            Class<?> api = Class.forName("gg.dropmc.survival.core.feature.bedrock.api.BedrockAPI");
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            Class<? extends Enum> feature = (Class<? extends Enum>)
+                    Class.forName("gg.dropmc.survival.core.feature.bedrock.api.ClientFeature");
+            @SuppressWarnings("unchecked")
+            Object javaDialogs = Enum.valueOf(feature, "JAVA_DIALOGS");
+            return (boolean) api.getMethod("supports", Player.class, feature).invoke(null, player, javaDialogs);
+        } catch (ReflectiveOperationException | IllegalArgumentException | LinkageError e) {
             return false;
         }
     }

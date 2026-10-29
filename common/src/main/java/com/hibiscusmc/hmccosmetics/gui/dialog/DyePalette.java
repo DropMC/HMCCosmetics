@@ -13,10 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The colours a cosmetic can be dyed, which are the ones the chest dye menu offers: a row of base
+ * The colours a cosmetic can be dyed, which are the ones the Bedrock dye form offers: a row of base
  * colours and, under the chosen one, its shades.
  * <p>
- * Read from that menu's own file so the two cannot drift apart: a colour that exists in one and
+ * Read from that palette's own file so the two cannot drift apart: a colour that exists in one and
  * not in the other is a colour a player can wear and not pick again.
  * </p>
  */

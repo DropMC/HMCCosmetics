@@ -8,6 +8,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
 import com.hibiscusmc.hmccosmetics.gui.Menu;
 import com.hibiscusmc.hmccosmetics.gui.Menus;
+import com.hibiscusmc.hmccosmetics.gui.bedrock.BedrockWardrobeForm;
 import com.hibiscusmc.hmccosmetics.gui.dialog.DialogGate;
 import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
@@ -341,13 +342,21 @@ public class UserWardrobeManager {
     }
 
     /**
-     * Opens the wardrobe's menu: the dialog when this server can show one, the chest menu otherwise.
+     * Opens the wardrobe's menu, whichever kind this player can be shown.
      * <p>
-     * Bedrock gets the dialog as well, drawn by the proxy. Its client will not open a container while
-     * the camera is pinned to the mannequin, so the chest menu is no fallback there.
+     * Bedrock gets {@link BedrockWardrobeForm}. Its client will not open a container while the
+     * camera is pinned to the mannequin, and the pinned camera is the wardrobe itself, so the chest
+     * menu cannot be relied on there at all: it has been seen to open and then stop opening again
+     * with nothing on this side having changed.
      * </p>
      */
     public void openWardrobeMenu() {
+        if (HookFloodgate.getsBedrockForms(user.getPlayer())) {
+            BedrockWardrobeForm.open(user);
+            return;
+        }
+
+        // The dialog when this server can show one; the chest menu is what is left otherwise.
         if (DialogGate.open(user)) return;
 
         Menu menu = lastOpenMenu != null ? lastOpenMenu : Menus.getDefaultMenu();

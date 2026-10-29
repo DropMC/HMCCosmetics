@@ -1,6 +1,7 @@
 package com.hibiscusmc.hmccosmetics.gui.dialog;
 
 import com.hibiscusmc.hmccosmetics.HMCCosmeticsPlugin;
+import com.hibiscusmc.hmccosmetics.hooks.misc.HookFloodgate;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
@@ -70,11 +71,12 @@ public final class DialogGate {
     /**
      * Opens the dialog for {@code user}.
      *
-     * @return false when it was not shown and the caller has to open something else: nobody can
-     *         draw it before the pack is generated. A Bedrock player gets it too, drawn by the proxy
+     * @return false when it was not shown and the caller has to open something else: a Bedrock
+     *         client without the core's {@code java-dialogs} gets its own form, and nobody can draw it
+     *         before the pack is generated
      */
     public static boolean open(@NotNull CosmeticUser user) {
-        if (!isEnabled) return false;
+        if (!isEnabled || HookFloodgate.getsBedrockForms(user.getPlayer())) return false;
         return WardrobeDialog.open(user);
     }
 
